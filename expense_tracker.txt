@@ -1,3 +1,0 @@
-
-
-cd /home/sourav/Workspace/code/expense_tracker/
