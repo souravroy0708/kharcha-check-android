@@ -6,13 +6,15 @@
     <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
 
-    <!-- Optional SMS permissions: the app is 100% usable without them via Quick Add and Share-to-App -->
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
+    <!-- 100% CLEAN SIDELOAD & ZERO PERMISSION FRICTION:
+         All sensitive SMS permissions (READ_SMS, RECEIVE_SMS, BROADCAST_SMS) are removed so
+         Google Play Protect never flags or blocks installation.
+         Expenses are tracked via supercharged Manual Entry, Smart Clipboard Paste, and Share-to-App. -->
+
     <!-- Optional local notifications for Sunday weekly glance & last-day month-end review -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+    <!-- Optional biometric authentication for app lock -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
         android:allowBackup="false"
@@ -34,23 +36,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Share to app": Share any bank SMS or payment text from Messages/WhatsApp when SMS permission is off -->
+            <!-- "Share to Kharcha Check": Share any bank SMS or UPI receipt text from GPay/PhonePe/Messages directly into the app -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
-
-        <!-- Receiver-based live SMS capture (no foreground service, no polling) -->
-        <receiver
-            android:name=".SmsReceiver"
-            android:permission="android.permission.BROADCAST_SMS"
-            android:exported="true">
-            <intent-filter android:priority="999">
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
 
         <!-- Share exported PDFs or encrypted backups via FileProvider -->
         <provider

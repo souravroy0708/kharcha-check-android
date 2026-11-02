@@ -452,6 +452,57 @@ fun QuickAddScreen(app: AppController, onClose: () -> Unit) {
             )
         }
 
+        // 1-Tap Daily Presets for Instant Logging
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            val presets = listOf(
+                Triple("☕ Chai ₹20", "20", 1L to "Chai / Tea"),
+                Triple("🛵 Auto ₹50", "50", 3L to "Auto Rickshaw"),
+                Triple("🥛 Milk ₹66", "66", 2L to "Mother Dairy"),
+                Triple("🛒 Blinkit ₹250", "250", 2L to "Blinkit"),
+                Triple("🍔 Swiggy ₹300", "300", 1L to "Swiggy"),
+                Triple("⛽ Petrol ₹500", "500", 3L to "Petrol Pump"),
+            )
+            presets.forEach { (label, amt, catInfo) ->
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(CardBg)
+                        .border(1.dp, Emerald.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                        .clickable {
+                            amountDigits = amt
+                            selectedCategoryId = catInfo.first
+                            merchantInput = catInfo.second
+                        }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelMedium, color = Emerald, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+
+        // Paste Payment Text Button
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(CardBg)
+                .border(1.dp, PaperLine, RoundedCornerShape(14.dp))
+                .clickable { app.shareSmsDialogOpen = true }
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("📋", fontSize = 16.sp)
+                Spacer(Modifier.width(8.dp))
+                Text("Paste Copied Payment / UPI Text", style = MaterialTheme.typography.bodyMedium, color = TextMain)
+            }
+            Text("Auto-fills in 1 tap →", style = MaterialTheme.typography.labelSmall, color = Emerald)
+        }
+
         // Category Chips (1 tap)
         Text("Tap Category:", style = MaterialTheme.typography.labelMedium, color = Muted)
         FlowRow(

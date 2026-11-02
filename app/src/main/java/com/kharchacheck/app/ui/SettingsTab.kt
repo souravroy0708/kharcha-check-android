@@ -105,22 +105,12 @@ fun SettingsTab(app: AppController, actions: PhoneActions) {
             }
         }
 
-        // 2. SMS Capture, Backfill & Golden Test Set Verifier
+        // 2. Indian Bank & UPI Parser (Share & Paste)
         AppCard(
-            title = "📩 Bank SMS Capture & Parser",
-            subtitle = if (app.smsGranted) "SMS permission is ON" else "SMS permission is OFF (Using Manual & Share-to-App)",
+            title = "⚡ Indian Bank & UPI Parser (Share / Paste)",
+            subtitle = "100% Privacy: Zero SMS permissions used. Runs strictly on shared or pasted text.",
         ) {
-            Text("One-time Inbox Backfill (reads only bank headers, stores only parsed fields):", style = MaterialTheme.typography.bodySmall, color = Muted)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                listOf(30, 90, 180).forEach { days ->
-                    SmallPill("Backfill ${days}d", emerald = app.prefs.lastBackfillDays == days) {
-                        if (app.smsGranted) app.runSmsBackfill(days) else actions.onRequestSmsPermissions(days)
-                    }
-                }
-            }
-
-            HorizontalDivider(color = PaperLine)
-            Text("Parser Quality Bar (Golden Set of ${SmsParser.GOLDEN_SAMPLES.size} Bank SMS):", style = MaterialTheme.typography.labelMedium)
+            Text("Parser Quality Bar (Golden Set of ${SmsParser.GOLDEN_SAMPLES.size} Indian Bank/UPI formats):", style = MaterialTheme.typography.labelMedium)
             goldenTestResult?.let {
                 Text(it, style = MaterialTheme.typography.bodyMedium, color = EmeraldDark, fontWeight = FontWeight.Bold)
             }
@@ -146,7 +136,8 @@ fun SettingsTab(app: AppController, actions: PhoneActions) {
                     Text("$sender: $tmpl", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 SmallPill("Copy Masked Templates") {
-                    val joined = app.unrecognisedSms.joinToString("\n") { "${it.first}: ${it.second}" }
+                    val joined = app.unrecognisedSms.joinToString("
+") { "${it.first}: ${it.second}" }
                     actions.onCopyText("Masked SMS Templates", joined)
                 }
             }

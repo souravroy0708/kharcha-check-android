@@ -1,6 +1,5 @@
 package com.kharchacheck.app
 
-import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -30,8 +29,8 @@ import com.kharchacheck.app.ui.PhoneActions
  * Single-Activity entry point for Kharcha Check (Spec Page 9).
  * Handles:
  * - Zero INTERNET permission verification (opens Android App Info -> Permissions so user can verify it)
- * - Optional SMS permissions (`RECEIVE_SMS`, `READ_SMS`) + 30/90/180 day backfill
- * - `ACTION_SEND` share-to-app receiver (share any bank SMS to Kharcha Check when SMS permission is off)
+ * - Zero sensitive SMS permissions (completely safe from Google Play Protect blocking)
+ * - `ACTION_SEND` share-to-app receiver (share any bank SMS or UPI text from Messages/WhatsApp)
  * - `FLAG_SECURE` toggle (hides app screen in recent apps switcher and blocks screenshots)
  * - Storage Access Framework (`CreateDocument` / `OpenDocument`) for PDF export and passphrase-encrypted `.kcbak` backups
  */
@@ -39,16 +38,6 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var app: AppController
     private var pendingBackupPassphrase: String = ""
-
-    private val smsPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
-            app.reload()
-            if (grants.values.any { it }) {
-                app.runSmsBackfill(30)
-            } else {
-                app.message = "SMS permission skipped. You can use Quick Add or Share-to-App anytime."
-            }
-        }
 
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
@@ -112,13 +101,12 @@ class MainActivity : ComponentActivity() {
         handleIncomingShareIntent(intent)
 
         val actions = PhoneActions(
-            onRequestSmsPermissions = { daysBack ->
-                app.prefs.lastBackfillDays = daysBack
-                smsPermissionLauncher.launch(arrayOf(Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS))
+            onRequestSmsPermissions = { _ ->
+                app.message = "100% Privacy: Sensitive SMS permissions are removed. Use Quick Add or Share-to-App!"
             },
             onRequestNotificationPermission = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                 } else {
                     ReminderWorker.schedule(this)
                 }

@@ -106,9 +106,7 @@ class AppController(private val ctx: Context, private val scope: CoroutineScope)
         reload()
     }
 
-    fun hasSmsPermission(): Boolean =
-        ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED
+    fun hasSmsPermission(): Boolean = false
 
     fun reload() {
         smsGranted = hasSmsPermission()
@@ -441,12 +439,7 @@ class AppController(private val ctx: Context, private val scope: CoroutineScope)
     }
 
     fun runSmsBackfill(days: Int) = launch {
-        busy = true
-        val res = SmsBackfill.run(ctx, days)
-        prefs.lastBackfillDays = days
-        reload()
-        busy = false
-        message = "Scanned ${res.scanned} SMS (${days}d): ${res.imported} transactions added (${res.reviewTrayCount} in Review tray)."
+        message = "SMS inbox reading is disabled for 100% privacy and Google Play Protect safety. Use Quick Add or Share-to-App!"
     }
 
     fun setWorth(txId: Long, worth: WorthTag) {

@@ -21,8 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Sms
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,18 +45,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.kharchacheck.app.AppController
 
 /**
  * 3-Screen Onboarding Flow (Spec Page 8):
  * 1. The Privacy Promise (no account, no server, no INTERNET permission — verifiable in Android Settings)
- * 2. Optional SMS Permission with a plain explanation + 30 / 90 / 180 day backfill selector
+ * 2. Zero-Permission Fast Entry (Quick Add numpad, 1-tap paste, and share-to-app)
  * 3. Optional App Lock (4-digit PIN + FLAG_SECURE hide in recent apps)
  */
 @Composable
 fun OnboardingFlow(app: AppController, actions: PhoneActions) {
     var step by rememberSaveable { mutableIntStateOf(0) }
-    var backfillDays by rememberSaveable { mutableIntStateOf(90) }
     var pinInput by rememberSaveable { mutableStateOf("") }
     var hideRecents by rememberSaveable { mutableStateOf(false) }
 
@@ -122,14 +122,15 @@ fun OnboardingFlow(app: AppController, actions: PhoneActions) {
                 ) {
                     Text("Provable Privacy Promise", color = Emerald, style = MaterialTheme.typography.titleLarge)
                     PromiseBullet("No account, no cloud server, no analytics or ads.")
-                    PromiseBullet("Ships WITHOUT the Android INTERNET permission — it is physically impossible for this app to upload your data.")
+                    PromiseBullet("Ships WITHOUT the Android INTERNET permission — physically impossible to upload your data.")
+                    PromiseBullet("No sensitive SMS permissions required — zero risk of Google Play Protect blocking.")
                     PromiseBullet("Neutral facts at month-end: no shaming, no lifestyle scores, no investment spam.")
                     TextButton(onClick = { actions.onOpenAppInfoPermissions() }) {
                         Text("Verify 'No Internet Permission' in Android Settings →", color = Amber)
                     }
                 }
 
-                BigButton("Next: How Expenses Are Captured →", emerald = true) {
+                BigButton("Next: How Easy It Is to Log Expenses →", emerald = true) {
                     step = 1
                 }
             }
@@ -137,18 +138,18 @@ fun OnboardingFlow(app: AppController, actions: PhoneActions) {
             1 -> {
                 Spacer(Modifier.height(8.dp))
                 Box(
-                    Modifier.size(68.dp).clip(CircleShape).background(Amber),
+                    Modifier.size(68.dp).clip(CircleShape).background(Emerald),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Filled.Sms, contentDescription = null, tint = Navy, modifier = Modifier.size(36.dp))
+                    Icon(Icons.Filled.Bolt, contentDescription = null, tint = Navy, modifier = Modifier.size(36.dp))
                 }
                 Text(
-                    "Automatic Bank SMS Capture (Optional)",
+                    "Zero-Friction Expense Logging",
                     color = Color.White,
                     style = MaterialTheme.typography.headlineLarge,
                 )
                 Text(
-                    "Almost every UPI, card, or ATM payment leaves a bank SMS on your phone. Kharcha Check parses bank alerts on-device and ignores personal chats and OTPs.",
+                    "No background SMS reading needed. Kharcha Check gives you 3 lightning-fast ways to track expenses in seconds:",
                     color = MutedOnDark,
                     style = MaterialTheme.typography.bodyLarge,
                 )
@@ -160,38 +161,14 @@ fun OnboardingFlow(app: AppController, actions: PhoneActions) {
                         .background(Navy2)
                         .border(1.dp, NavyLine, RoundedCornerShape(22.dp))
                         .padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("Choose one-time backfill window:", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(30, 90, 180).forEach { days ->
-                            val on = backfillDays == days
-                            Box(
-                                Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(if (on) Emerald else Navy3)
-                                    .clickable { backfillDays = days }
-                                    .padding(vertical = 12.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    "$days Days",
-                                    color = if (on) Navy else Color.White,
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            }
-                        }
-                    }
-                    PromiseBullet("Data minimisation: only the amount, merchant, and SMS ID are stored — never the raw message body.")
-                    PromiseBullet("100% optional: if you skip SMS permission, Quick Add (< 5 sec) and Share-to-App still work.")
+                    FeatureRow("⚡ 3-Second Quick Add", "Type amount on the calculator numpad, tap a category chip, done! Defaults to current time and last-used account.")
+                    FeatureRow("📋 1-Tap Smart Paste", "Copy any bank or UPI payment message, tap 'Paste' on the Home screen, and it automatically extracts amount, merchant, and category.")
+                    FeatureRow("↗️ Share to Kharcha Check", "From Google Pay, PhonePe, Paytm, or Messages, tap 'Share' to Kharcha Check to record instantly without typing.")
                 }
 
-                BigButton("Allow Bank SMS & Backfill $backfillDays Days", emerald = true) {
-                    actions.onRequestSmsPermissions(backfillDays)
-                    step = 2
-                }
-                GhostButton("Skip SMS Permission (Use Manual & Share-to-App)") {
+                BigButton("Next: Security & App Lock →", emerald = true) {
                     step = 2
                 }
             }
@@ -268,6 +245,15 @@ private fun PromiseBullet(text: String) {
         Text("✓", color = Emerald, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(10.dp))
         Text(text, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun FeatureRow(title: String, desc: String) {
+    Column {
+        Text(title, color = Emerald, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(2.dp))
+        Text(desc, color = MutedOnDark, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
