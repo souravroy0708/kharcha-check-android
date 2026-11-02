@@ -208,6 +208,7 @@ object SmsParser {
         // Payment Mode classification
         val mode = when {
             lower.contains("atm") || lower.contains("withdrawn") || lower.contains("cash wdl") -> PayMode.ATM
+            isTransferOrCardBill -> PayMode.UPI
             lower.contains("upi") || lower.contains("vpa") || lower.contains("@") -> PayMode.UPI
             lower.contains("credit card") || lower.contains("debit card") || lower.contains("pos ") || lower.contains("spent on card") || lower.contains("card xx") -> PayMode.CARD
             lower.contains("imps") || lower.contains("neft") || lower.contains("rtgs") || lower.contains("ach ") || lower.contains("ecs") -> PayMode.NET_BANKING
