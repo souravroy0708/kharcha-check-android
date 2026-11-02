@@ -53,33 +53,33 @@ object SmsParser {
 
     // Step 2: Exclusion patterns (OTPs, promos, statements, failed/declined, mandates, balance-only)
     private val EXCLUDE_REGEX = Regex(
-        "\b(otp|one time password|verification code|auth code|cvv|pin is|" +
-            "statement for|e-statement|min amount due|minimum amount due|total amount due|bill is generated|" +
-            "autopay mandate|mandate successfully|e-mandate|standing instruction|" +
-            "failed|declined|unsuccessful|could not be processed|reversed|" +
-            "pre-approved|apply now|avail loan|personal loan|credit limit increase|offer valid|" +
-            "available balance is rs|avl bal is rs)\b",
+        """\b(otp|one time password|verification code|auth code|cvv|pin is|""" +
+            """statement for|e-statement|min amount due|minimum amount due|total amount due|bill is generated|""" +
+            """autopay mandate|mandate successfully|e-mandate|standing instruction|""" +
+            """failed|declined|unsuccessful|could not be processed|reversed|""" +
+            """pre-approved|apply now|avail loan|personal loan|credit limit increase|offer valid|""" +
+            """available balance is rs|avl bal is rs)\b""",
         RegexOption.IGNORE_CASE
     )
 
     // Amount regex supporting Rs., INR, ₹ with Indian commas (e.g. Rs. 1,24,500.50 or INR 185)
     private val AMOUNT_REGEX = Regex(
-        "(?:rs\.?|inr|₹)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)",
+        """(?:rs\.?|inr|₹)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)""",
         RegexOption.IGNORE_CASE
     )
 
     private val BALANCE_REGEX = Regex(
-        "(?:avl\s*bal|avail(?:able)?\s*bal(?:ance)?|bal(?:ance)?\s*(?:is|:))\s*(?:rs\.?|inr|₹)?\s*([0-9,]+(?:\.[0-9]{1,2})?)",
+        """(?:avl\s*bal|avail(?:able)?\s*bal(?:ance)?|bal(?:ance)?\s*(?:is|:))\s*(?:rs\.?|inr|₹)?\s*([0-9,]+(?:\.[0-9]{1,2})?)""",
         RegexOption.IGNORE_CASE
     )
 
     private val ACCOUNT_LAST4_REGEX = Regex(
-        "(?:a/c|acct|account|card|ending|xx+|\*+)\s*(?:no\.?|ending|with)?\s*[xX*#\-]*([0-9]{3,4})\b",
+        """(?:a/c|acct|account|card|ending|xx+|\*+)\s*(?:no\.?|ending|with)?\s*[xX*#\-]*([0-9]{3,4})\b""",
         RegexOption.IGNORE_CASE
     )
 
     private val REF_REGEX = Regex(
-        "(?:upi\s*ref(?:\s*no)?|ref(?:\s*no|\.|#)?|utr|rrn|txn(?:\s*id)?)[:\s\-]*([A-Za-z0-9]{6,22})",
+        """(?:upi\s*ref(?:\s*no)?|ref(?:\s*no|\.|#)?|utr|rrn|txn(?:\s*id)?)[:\s\-]*([A-Za-z0-9]{6,22})""",
         RegexOption.IGNORE_CASE
     )
 
@@ -286,9 +286,9 @@ object SmsParser {
         // Try common Indian bank SMS patterns:
         // 1. "to VPA name@bank (Merchant Name)" or "to/at/towards <Merchant> on/ref/UPI"
         val patterns = listOf(
-            Regex("(?:to|at|towards|from|info:|trf to|paid to)\s+([A-Za-z0-9@._\-&/ ]{2,40}?)(?:\s+on\b|\s+ref\b|\s+upi\b|\s+utr\b|\s+avl\b|\.|$)", RegexOption.IGNORE_CASE),
-            Regex("vpa\s+([A-Za-z0-9._\-]+@[A-Za-z0-9]+)", RegexOption.IGNORE_CASE),
-            Regex("for\s+([A-Za-z0-9 .&\-]{3,35}?)(?:\s+on\b|\s+at\b|\s+ref\b|\.|$)", RegexOption.IGNORE_CASE)
+            Regex("""(?:to|at|towards|from|info:|trf to|paid to)\s+([A-Za-z0-9@._\-&/ ]{2,40}?)(?:\s+on\b|\s+ref\b|\s+upi\b|\s+utr\b|\s+avl\b|\.|$)""", RegexOption.IGNORE_CASE),
+            Regex("""vpa\s+([A-Za-z0-9._\-]+@[A-Za-z0-9]+)""", RegexOption.IGNORE_CASE),
+            Regex("""for\s+([A-Za-z0-9 .&\-]{3,35}?)(?:\s+on\b|\s+at\b|\s+ref\b|\.|$)""", RegexOption.IGNORE_CASE)
         )
         for (p in patterns) {
             val m = p.find(body)?.groupValues?.getOrNull(1)?.trim()
@@ -306,8 +306,8 @@ object SmsParser {
             s = s.substringBefore("@")
         }
         // Strip legal suffixes and noise words
-        s = s.replace(Regex("\b(pvt|ltd|limited|private|india|technologies|retail|services|llp|inc|vpa|upi)\b", RegexOption.IGNORE_CASE), " ")
-        s = s.replace(Regex("[^A-Za-z0-9 &\-]"), " ").replace(Regex("\s+"), " ").trim()
+        s = s.replace(Regex("""\b(pvt|ltd|limited|private|india|technologies|retail|services|llp|inc|vpa|upi)\b""", RegexOption.IGNORE_CASE), " ")
+        s = s.replace(Regex("""[^A-Za-z0-9 &\-]"""), " ").replace(Regex("""\s+"""), " ").trim()
         return s.take(32)
     }
 

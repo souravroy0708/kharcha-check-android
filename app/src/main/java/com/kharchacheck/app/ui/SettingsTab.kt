@@ -136,8 +136,7 @@ fun SettingsTab(app: AppController, actions: PhoneActions) {
                     Text("$sender: $tmpl", style = MaterialTheme.typography.bodySmall, color = Muted)
                 }
                 SmallPill("Copy Masked Templates") {
-                    val joined = app.unrecognisedSms.joinToString("
-") { "${it.first}: ${it.second}" }
+                    val joined = app.unrecognisedSms.joinToString("\n") { "${it.first}: ${it.second}" }
                     actions.onCopyText("Masked SMS Templates", joined)
                 }
             }
