@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Spec Page 9: Exclude all data in data-extraction rules so Android's cloud backup never copies it -->
+<!-- Nothing is ever copied by Android cloud backup or device-to-device transfer.
+     Users move data with the password-protected .kcbak backup instead. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="root" />

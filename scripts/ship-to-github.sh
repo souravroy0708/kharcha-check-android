@@ -17,7 +17,7 @@ fi
 [ -d .git ] || git init
 git branch -M main
 git add -A
-git diff --cached --quiet || git commit -m "Kharcha Check v1.0 (100% On-Device Expense Tracker)"
+git diff --cached --quiet || git commit -m "Kharcha Check v2.0: private expense tracker"
 
 if gh repo view "$REPO_ARG" >/dev/null 2>&1; then
   git remote get-url origin >/dev/null 2>&1 && git remote set-url origin "https://github.com/$REPO_ARG.git" || git remote add origin "https://github.com/$REPO_ARG.git"

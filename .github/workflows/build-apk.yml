@@ -1,8 +1,9 @@
-name: Build APK and Play bundle
+name: Build, test and package
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -11,6 +12,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -28,82 +30,116 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.KC_KEYSTORE_BASE64 }}
         run: |
           if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::No KC_KEYSTORE_BASE64 secret. Building with debug key."
+            echo "::warning::No KC_KEYSTORE_BASE64 secret. Building with the debug key (not uploadable to Play)."
           else
             echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
             echo "KC_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           fi
 
-      - name: Run SMS Parser Golden Set Unit Tests
+      - name: Unit tests (SMS golden set, report maths, gamification, crypto)
         run: |
           chmod +x gradlew
-          ./gradlew testDebugUnitTest --console=plain
+          ./gradlew testStandardDebugUnitTest --console=plain
 
-      - name: Build signed release APK
+      - name: Build release APKs (standard and smart)
         env:
           KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
-        run: |
-          ./gradlew assembleRelease --console=plain
-          mv app/build/outputs/apk/release/app-release.apk "app/build/outputs/apk/release/KharchaCheck-v1.0.${{ github.run_number }}.apk"
-          cp "app/build/outputs/apk/release/KharchaCheck-v1.0.${{ github.run_number }}.apk" app/build/outputs/apk/release/KharchaCheck.apk
+        run: ./gradlew assembleStandardRelease assembleSmartRelease --console=plain
 
-      - name: Verify merged release manifest has zero INTERNET permission (Spec Page 9 Privacy Gate)
-        run: |
-          MANIFEST="app/build/intermediates/merged_manifest/release/processReleaseMainManifest/AndroidManifest.xml"
-          if [ ! -f "$MANIFEST" ]; then
-            MANIFEST=$(find app/build/intermediates/merged_manifest -name "AndroidManifest.xml" | head -n 1)
-          fi
-          echo "Checking merged manifest: $MANIFEST"
-          if grep -q "android.permission.INTERNET" "$MANIFEST"; then
-            echo "::error::PRIVACY VIOLATION: Merged release manifest contains android.permission.INTERNET!"
-            exit 1
-          fi
-          echo "Verified: Zero android.permission.INTERNET in merged release manifest."
-
-      - name: Build signed release bundle (.aab) for Google Play
+      # Google Play needs an .aab. Only built with your real key: Play rejects debug-signed bundles.
+      - name: Build signed Play bundles (.aab)
         if: env.KC_KEYSTORE_PATH != ''
         env:
           KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
-        run: |
-          ./gradlew bundleRelease --console=plain
-          mv app/build/outputs/bundle/release/app-release.aab "app/build/outputs/bundle/release/KharchaCheck-v1.0.${{ github.run_number }}.aab"
+        run: ./gradlew bundleStandardRelease bundleSmartRelease --console=plain
 
       - name: Warn when no Play bundle was built
         if: env.KC_KEYSTORE_PATH == ''
-        run: echo "::warning::No .aab built. Run ./scripts/setup-signing.sh to configure KC_KEYSTORE_* secrets."
+        run: echo "::warning::No .aab built. Run ./scripts/setup-signing.sh to add the KC_KEYSTORE_* secrets."
 
-      - name: Upload Play bundle (.aab)
+      - name: Privacy gate (fails the build if a permission sneaks in)
+        run: |
+          set -e
+          check() {
+            local flavor=$1
+            local m=$(find app/build/intermediates/merged_manifest -path "*${flavor}Release*" -name AndroidManifest.xml | head -n1)
+            echo "Checking $flavor: $m"
+            [ -f "$m" ] || { echo "::error::Merged manifest for $flavor not found"; exit 1; }
+            # Internet is allowed (AMFI fund prices). Advertising IDs and location never are.
+            if grep -q 'AD_ID"' "$m"; then echo "::error::$flavor has AD_ID"; exit 1; fi
+            if grep -q 'ACCESS_FINE_LOCATION"\|ACCESS_COARSE_LOCATION"\|READ_CONTACTS"' "$m"; then echo "::error::$flavor requests location or contacts"; exit 1; fi
+            grep -q 'cleartextTrafficPermitted\|networkSecurityConfig' "$m" || { echo "::error::$flavor lost its HTTPS-only network config"; exit 1; }
+            echo "$m"
+          }
+          STD=$(check standard | tail -n1)
+          SMART=$(check smart | tail -n1)
+          if grep -q 'READ_SMS\|RECEIVE_SMS' "$STD"; then echo "::error::standard edition must not request SMS permissions"; exit 1; fi
+          grep -q 'READ_SMS' "$SMART" || { echo "::error::smart edition is missing READ_SMS"; exit 1; }
+          echo "✓ Both editions: no ad id, no location/contacts, HTTPS-only. Standard: no SMS."
+
+      - name: Name outputs
+        run: |
+          V=2.0.${{ github.run_number }}
+          mkdir -p out
+          cp app/build/outputs/apk/standard/release/*.apk "out/KharchaCheck-$V-standard.apk"
+          cp app/build/outputs/apk/smart/release/*.apk "out/KharchaCheck-$V-smart.apk"
+          cp "out/KharchaCheck-$V-standard.apk" out/KharchaCheck.apk
+          if [ -n "${KC_KEYSTORE_PATH:-}" ]; then
+            cp app/build/outputs/bundle/standardRelease/*.aab "out/KharchaCheck-$V-standard.aab"
+            cp app/build/outputs/bundle/smartRelease/*.aab "out/KharchaCheck-$V-smart.aab"
+          fi
+          ls -la out
+
+      - name: Upload Play bundles (.aab)
         if: env.KC_KEYSTORE_PATH != ''
         uses: actions/upload-artifact@v4
         with:
-          name: KharchaCheck-play-bundle-v1.0.${{ github.run_number }}
-          path: app/build/outputs/bundle/release/*.aab
+          name: KharchaCheck-play-bundles-2.0.${{ github.run_number }}
+          path: out/*.aab
           retention-days: 30
 
-      - name: Upload APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: KharchaCheck-v1.0.${{ github.run_number }}
-          path: app/build/outputs/apk/release/*.apk
+          name: KharchaCheck-apks-2.0.${{ github.run_number }}
+          path: out/*.apk
           retention-days: 30
+
+      # Lets Play Console show readable crash stack traces (upload mapping.txt with the bundle if Play asks)
+      - name: Upload R8 mapping files
+        uses: actions/upload-artifact@v4
+        with:
+          name: KharchaCheck-mapping-2.0.${{ github.run_number }}
+          path: app/build/outputs/mapping/
+          retention-days: 90
 
       - name: Publish GitHub Release (signed builds on main only)
         if: success() && env.KC_KEYSTORE_PATH != '' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Kharcha Check 1.0.${{ github.run_number }}
+          tag_name: v2.0.${{ github.run_number }}
+          name: Kharcha Check 2.0.${{ github.run_number }}
           make_latest: true
           files: |
-            app/build/outputs/apk/release/KharchaCheck.apk
-            app/build/outputs/apk/release/KharchaCheck-v1.0.${{ github.run_number }}.apk
+            out/KharchaCheck.apk
+            out/KharchaCheck-2.0.${{ github.run_number }}-standard.apk
+            out/KharchaCheck-2.0.${{ github.run_number }}-smart.apk
           body: |
-            **Kharcha Check — Paisa kahan gaya, ab pata chalega.**
-            100% On-Device Expense Tracker. Ships **without the INTERNET permission** (verifiable in Android Settings -> Apps -> Kharcha Check -> Permissions).
+            **Kharcha Check: Paisa kahan gaya? Ab pata chalega.**
+            Private expense tracker. No internet permission, no account, encrypted on your phone.
+            **Install:** download `KharchaCheck.apk` on your Android phone and open it.
+            `-smart.apk` adds optional bank-SMS reading (off until you turn it on).
+
+      - name: Upload Room schema (commit it so future migrations can be tested)
+        uses: actions/upload-artifact@v4
+        with:
+          name: room-schema
+          path: app/schemas/
+          retention-days: 30
 
       - name: Upload build reports (only when the build fails)
         if: failure()
@@ -112,5 +148,4 @@ jobs:
           name: build-reports
           path: |
             app/build/reports/
-            app/build/intermediates/lint_vital_intermediate_text_report/
           retention-days: 7

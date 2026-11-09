@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:orientation="vertical"
+    android:padding="14dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_streak"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#FFFFFF"
+                android:textSize="17sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:text="Kharcha Check" />
+
+            <TextView
+                android:id="@+id/widget_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="#BCC1E0"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:text="Tap + to log a spend" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_add"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:background="@drawable/widget_button"
+            android:gravity="center"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:text="+ Add"
+            android:textColor="#0F1235"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:contentDescription="Add an expense" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_thought"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:ellipsize="end"
+        android:maxLines="3"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:text="" />
+</LinearLayout>

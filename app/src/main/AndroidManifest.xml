@@ -2,57 +2,88 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- PRIVACY PROMISE: Strictly remove INTERNET and ACCESS_NETWORK_STATE so the app is provably offline in Android Settings -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <!-- Internet is used for exactly one thing: downloading AMFI's public daily NAV file (HTTPS only,
+         no personal data sent). No ads, no analytics, no tracking; CI fails the build if an advertising ID appears. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
 
-    <!-- 100% CLEAN SIDELOAD & ZERO PERMISSION FRICTION:
-         All sensitive SMS permissions (READ_SMS, RECEIVE_SMS, BROADCAST_SMS) are removed so
-         Google Play Protect never flags or blocks installation.
-         Expenses are tracked via supercharged Manual Entry, Smart Clipboard Paste, and Share-to-App. -->
-
-    <!-- Optional local notifications for Sunday weekly glance & last-day month-end review -->
+    <!-- Optional: daily nudge and month-end report (asked for in context, never on first launch) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Optional biometric authentication for app lock -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
     <application
+        android:name=".KharchaApp"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.KharchaCheck">
+        android:enableOnBackInvokedCallback="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.KharchaCheck"
+        tools:targetApi="34">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:theme="@style/Theme.KharchaCheck.Starting"
             android:launchMode="singleTop"
+            android:theme="@style/Theme.KharchaCheck.Starting"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
-            <!-- "Share to Kharcha Check": Share any bank SMS or UPI receipt text from GPay/PhonePe/Messages directly into the app -->
-            <intent-filter>
+            <!-- "Share to Kharcha Check": any bank SMS or UPI receipt text, no SMS permission needed -->
+            <intent-filter android:label="@string/share_label">
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
+                <!-- A GPay / PhonePe / Paytm payment screenshot: opens a new entry with it attached -->
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <!-- Open or share a bank / card statement from Gmail, Drive or Files: it's stored encrypted and read on the phone -->
+            <intent-filter android:label="@string/import_statement_label">
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="text/csv" />
+                <data android:mimeType="text/comma-separated-values" />
+                <data android:mimeType="application/vnd.ms-excel" />
+                <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
             </intent-filter>
         </activity>
 
-        <!-- Share exported PDFs or encrypted backups via FileProvider -->
+        <!-- Only for "Open in another app": a temporary decrypted copy in cache/share, wiped on every launch -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
+            android:authorities="${applicationId}.files"
             android:exported="false"
             android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/share_paths" />
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Quick Settings tile: "Add expense" from the notification shade -->
+        <service
+            android:name=".widget.QuickAddTile"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/shortcut_add"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Home-screen widget: streak, quick add, daily money thought. Shows no amounts, by design. -->
+        <receiver android:name=".widget.KharchaWidget" android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_kharcha_info" />
+        </receiver>
     </application>
 </manifest>
