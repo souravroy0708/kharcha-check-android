@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
@@ -79,6 +80,7 @@ import java.util.Locale
 
 private enum class Dlg { AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE, SMS_INFO }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     val d by vm.data.collectAsStateWithLifecycle()
