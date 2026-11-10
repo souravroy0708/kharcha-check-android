@@ -23,6 +23,12 @@ leaks in your spending, turn the savings into investments, and make it a daily h
 | **Quick Settings tile** | "Add expense" from the notification shade. |
 | **📘 Smart Money Guide** | *My salary plan:* needs / wants / save split for your take-home (savings % scales with income), compared with this month's actual; a money ladder in the right order (starter fund → health cover → term cover if someone depends on you → clear costly debt → 6-month fund → SIP → yearly step-up → yearly check-up) using your own EMIs and essentials; monthly SIP split by age and risk comfort; 10/20-year and step-up projections. *Investing:* the golden rules. *Online spend:* 24 app tricks (menu mark-ups, minimum-order traps, fake countdowns, no-cost EMI, BNPL, auto-renewing trials…) led by your own biggest online leak. |
 | **💡 Daily morning tip** | Notification at your chosen time with the day's tip and "Try today"; on cut-a-leak days it adds your biggest online leak this month. "✅ I did it" on Home: +15 XP and a tips streak. |
+| **Statement import (v2 parser)** | From Home, Activity or "Open with" in Gmail/Drive. Digital PDFs are read **by column position** (every character's x/y): header detection (Date / Narration / Withdrawal / Deposit / Balance / Amount / Dr-Cr), right-aligned amounts snapped to their column, glued columns split, wrapped narrations joined, multi-page headers, newest-first or oldest-first, every row verified against the running balance. Up to 200 pages (a full year). Scanned pages fall back to OCR. |
+| **No double entries** | Count-based dedupe on every import: same bank reference, or same day + amount + direction + merchant = already in app (hidden, never re-added); same amount within a day = "maybe" (unticked). Re-importing the same file adds nothing and says when you last imported it. Undo after any import. |
+| **Edit everywhere** | Every entry opens the full editor; long-press in Activity to multi-select → change category or delete (with Undo); import rows editable (payee, amount, date, note, category); dues, repeating entries, bills, goals, wealth items all editable. |
+| **🙈 Hidden entries** | Hide any entry (editor toggle, or multi-select in Activity). Hidden entries are left out of every list, search, total, report, trend, Wrapped, export and notification. Settings → Hidden entries unlocks them with fingerprint / screen lock until the app leaves the screen; the count isn't shown while locked. Duplicate checks still see them, so re-imports don't resurface them. 👁 on Home masks the big amounts. |
+| **Undo a bad import** | Statements → Import history lists each import (entries, date range) with one-tap Delete + Undo. Activity has an "📄 Imported" filter for picking individual rows. |
+| **Export** | Excel (.xlsx with real dates/numbers, frozen header, filters, Monthly summary + By category sheets) or CSV (UTF-8 with BOM so ₹ shows in Excel); any period and entry types; Save to phone or Share; explains export vs full backup for uninstalling. |
 | **Grow** | Levels and XP, streaks, 21-day habit grid, 14 badges, 8 challenges (No delivery week, Junk-free 10, Leak-free week...), savings goals, cut-a-leak → SIP calculator, emergency fund target, 18 golden rules. |
 | **Repeating entries** | Tick "Repeat every month" when saving rent, EMI, SIP, salary or a subscription. It's added to Review on its day each month (catching up at most 3 months if the phone was off). Pause or stop any time in Settings. |
 | **Attachments** | Profile photo; receipts and GPay / PhonePe / Paytm screenshots on any entry (or share a screenshot to the app to start an entry); monthly bank, credit card and UPI statements (Report → Statements). All encrypted in the app with a Keystore key; in-app viewer with zoom and PDF pages; "Open in app" for password-protected statements. Not in `.kcbak` backups. |
@@ -90,7 +96,8 @@ app/src/main/java/com/kharchacheck/app/
   core/model      Money (integer paise), Txn, Category, 73 default categories
   domain          ReportEngine, AnalyticsEngine (trends, regulars, outliers, heatmap, weekly digest), Gamification, DailyWisdom (100 cards), GoldenRules, InvestMath,
                   AmountExpression, RecurringPlanner, CsvWriter, BackupCrypto, sms/SmsParser   ← pure Kotlin, unit tested
-  domain/read     ReceiptParser, StatementParser (lines + tables), SpreadsheetReader (xlsx/html/csv), Classifier   ← pure Kotlin, unit tested
+  domain/read     PdfTable (position-aware), ReceiptParser, StatementParser, SpreadsheetReader (xlsx/html/csv), Classifier
+  domain/export   Exporter (CSV + XLSX), XlsxWriter;  domain/Dedupe   ← pure Kotlin, unit tested
   read            OcrEngine (Tesseract, swappable), AutoReader (PdfBox text → OCR fallback → parse)
   data            Room + SQLCipher, Keystore-wrapped DB key, DataStore settings, FinanceRepository,
                   FileVault (encrypted attachments), AttachmentRepository
@@ -101,7 +108,7 @@ app/src/main/java/com/kharchacheck/app/
   export          ReportPdf, BackupManager
 app/src/standard  SmsSupport stub (no permissions)
 app/src/smart     SmsSupport, SmsReceiver, manifest with SMS permissions
-app/src/test      68 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
+app/src/test      78 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
 ```
 
 `./gradlew testStandardDebugUnitTest` runs the tests locally.

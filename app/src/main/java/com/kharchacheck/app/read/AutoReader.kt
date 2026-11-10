@@ -10,7 +10,10 @@ import com.kharchacheck.app.core.model.Attachment
 import com.kharchacheck.app.core.model.AttachmentKind
 import com.kharchacheck.app.data.files.FileVault
 import com.kharchacheck.app.domain.read.ReceiptParser
+import com.kharchacheck.app.domain.read.Glyph
+import com.kharchacheck.app.domain.read.PdfTable
 import com.kharchacheck.app.domain.read.StatementParser
+import com.tom_roush.pdfbox.text.TextPosition
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.encryption.InvalidPasswordException
@@ -63,6 +66,25 @@ class AutoReader(private val context: Context, private val ocr: OcrEngine) {
         } finally { ocr.release() }
     }
 
+    /** PdfBox text stripper that also records every character's position, for the column-aware table reader. */
+    private class GlyphStripper : PDFTextStripper() {
+        val glyphs = ArrayList<Glyph>()
+        var pageIndex = 0
+        init { sortByPosition = true }
+        override fun writeString(text: String?, textPositions: MutableList<TextPosition>?) {
+            val list = textPositions ?: return
+            for (tp in list) glyphs += Glyph(tp.getUnicode() ?: "", tp.getXDirAdj(), tp.getWidthDirAdj(), tp.getYDirAdj(), tp.getHeightDir(), pageIndex)
+            // PdfBox calls this once per word: mark the boundary so words stay separate.
+            list.lastOrNull()?.let { glyphs += Glyph(" ", it.getXDirAdj() + it.getWidthDirAdj(), 0f, it.getYDirAdj(), it.getHeightDir(), pageIndex) }
+        }
+    }
+
+    /**
+     * Digital statements: every character with its position → column-aware table reader (accurate amounts,
+     * debit vs credit from the column, verified against the running balance). Scanned pages fall back to OCR.
+     * Password-protected PDFs open on every Android version; the password is used once, never stored.
+     * Up to 200 pages, so a full year of statements works.
+     */
     private suspend fun pdf(bytes: ByteArray, password: String?, month: YearMonth, card: Boolean, onProgress: (Int, Int) -> Unit): Outcome {
         PDFBoxResourceLoader.init(context.applicationContext)
         val doc = try {
@@ -73,9 +95,10 @@ class AutoReader(private val context: Context, private val ocr: OcrEngine) {
             return Outcome.Failed("This PDF couldn't be opened. If your bank offers a CSV or Excel download, attach that instead.")
         }
         doc.use { d ->
-            val total = minOf(d.numberOfPages, 30)
-            val stripper = PDFTextStripper().apply { sortByPosition = true }
+            val total = minOf(d.numberOfPages, 200)
+            val stripper = GlyphStripper()
             val renderer = PDFRenderer(d)
+            var ocrPages = 0
 
             suspend fun ocrPage(i: Int): List<String> {
                 val bmp = withContext(Dispatchers.IO) { renderer.renderImage(i, 3f, ImageType.RGB) }
@@ -86,23 +109,32 @@ class AutoReader(private val context: Context, private val ocr: OcrEngine) {
                 return out
             }
 
-            val lines = mutableListOf<String>()
-            var textPages = 0
+            val textLines = mutableListOf<String>()
+            val scannedLines = mutableListOf<String>()
             for (i in 0 until total) {
                 coroutineContext.ensureActive()
                 onProgress(i + 1, total)
+                val before = stripper.glyphs.size
                 val text = withContext(Dispatchers.IO) {
-                    runCatching { stripper.startPage = i + 1; stripper.endPage = i + 1; stripper.getText(d) }.getOrDefault("")
+                    runCatching { stripper.pageIndex = i; stripper.startPage = i + 1; stripper.endPage = i + 1; stripper.getText(d) }.getOrDefault("")
                 }
-                if (readable(text)) { lines += text.lines(); textPages++ } else lines += ocrPage(i)
+                if (readable(text)) textLines += text.lines()
+                else {
+                    while (stripper.glyphs.size > before) stripper.glyphs.removeAt(stripper.glyphs.lastIndex)
+                    if (ocrPages < 60) { scannedLines += ocrPage(i); ocrPages++ }
+                }
             }
-            val first = StatementParser.fromLines(lines, month, card.takeIf { it })
-            if (first.rows.isNotEmpty() || textPages == 0) return Outcome.Rows(first)
+            val cardHint = card.takeIf { it }
+            val table = withContext(Dispatchers.Default) { PdfTable.parse(stripper.glyphs, month, card) }
+            val rows = if (table != null && table.rows.isNotEmpty()) {
+                table.rows + if (scannedLines.isNotEmpty()) StatementParser.fromLines(scannedLines, month, cardHint).rows else emptyList()
+            } else StatementParser.fromLines(textLines + scannedLines, month, cardHint).rows
+            if (rows.isNotEmpty() || textLines.isEmpty()) return Outcome.Rows(StatementParser.Result(rows, card || (table?.creditCard ?: false)))
 
             // Text came out but nothing parsed (fonts without proper character maps): read the pages visually instead.
             val ocrLines = mutableListOf<String>()
-            for (i in 0 until total) { coroutineContext.ensureActive(); onProgress(i + 1, total); ocrLines += ocrPage(i) }
-            return Outcome.Rows(StatementParser.fromLines(ocrLines, month, card.takeIf { it }))
+            for (i in 0 until minOf(total, 60)) { coroutineContext.ensureActive(); onProgress(i + 1, total); ocrLines += ocrPage(i) }
+            return Outcome.Rows(StatementParser.fromLines(ocrLines, month, cardHint))
         }
     }
 

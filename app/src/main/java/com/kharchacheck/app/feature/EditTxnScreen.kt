@@ -139,6 +139,7 @@ class EditTxnState : ViewModel() {
     var rememberRule by mutableStateOf(false)
     var repeat by mutableStateOf(false)
     var splitOn by mutableStateOf(false)
+    var hidden by mutableStateOf(false)
     var splitNames by mutableStateOf("")
     var attachmentIds by mutableStateOf<List<Long>>(emptyList())
     /** Attachment waiting to be auto-read once it appears in the attachments list. */
@@ -159,7 +160,7 @@ class EditTxnState : ViewModel() {
 
     fun resetForAnother() {
         original = null; expr = ""; categoryId = 0; payee = ""; note = ""; tags = ""; worth = Worth.NONE; goalId = null
-        source = Source.MANUAL; refNo = ""; rememberRule = false; repeat = false; splitOn = false; splitNames = ""; attachmentIds = emptyList(); pendingRead = null; readNote = null; keypad = true; startedAt = System.currentTimeMillis()
+        source = Source.MANUAL; refNo = ""; rememberRule = false; repeat = false; splitOn = false; hidden = false; splitNames = ""; attachmentIds = emptyList(); pendingRead = null; readNote = null; keypad = true; startedAt = System.currentTimeMillis()
     }
 
     fun build(): Txn? {
@@ -212,6 +213,7 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
         when {
             route.id > 0 -> vm.loadTxn(route.id)?.let {
                 st.fill(it, editing = true)
+                st.hidden = route.id in data.hiddenIds
                 st.attachmentIds = vm.attachments.value.filter { a -> a.txnId == route.id }.map { a -> a.id }
             }
             route.fromDraft -> vm.takeDraft()?.let {
@@ -246,7 +248,8 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
             built.copy(amountPaise = mine, note = note) to AppViewModel.SplitRequest(names, each, built.amountPaise)
         } else built to null
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-        vm.save(t, st.rememberRule, repeatMonthly = st.repeat && !editing, attachmentIds = st.attachmentIds, split = split) {
+        vm.save(t, st.rememberRule, repeatMonthly = st.repeat && !editing, attachmentIds = st.attachmentIds, split = split,
+            hidden = if (editing || st.hidden) st.hidden else null) {
             val secs = (System.currentTimeMillis() - st.startedAt) / 1000
             vm.say(if (editing) "Saved ✓" else "Added ${Money.format(t.amountPaise)}" + if (secs in 1..9) " in ${secs}s ⚡" else " ✓")
             if (another) st.resetForAnother() else close()
@@ -413,6 +416,9 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) st.keypad = false })
             OutlinedTextField(st.tags, { st.tags = it.take(60) }, label = { Text("Tags (optional, e.g. trip-goa, office)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) st.keypad = false })
+            com.kharchacheck.app.ui.components.SwitchRow("🙈 Hide this entry",
+                "Private: left out of lists, totals, reports, exports and notifications. See it only after unlocking in Settings → Hidden entries.", st.hidden) { st.hidden = it }
+
             // Receipt / UPI screenshot, for reference. Stored encrypted; shown only inside the app.
             Text("Receipt or screenshot", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
             val mine = st.attachmentIds.mapNotNull { id -> allAttachments.firstOrNull { it.id == id } }

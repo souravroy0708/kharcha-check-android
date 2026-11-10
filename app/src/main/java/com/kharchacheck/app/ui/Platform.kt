@@ -16,6 +16,8 @@ class PlatformActions(
     val pasteFromClipboard: () -> String?,
     val emailSupport: () -> Unit,
     val shareText: (String) -> Unit,
+    /** Writes a file to private cache and opens the share sheet (email, WhatsApp, Drive…). */
+    val shareFile: (bytes: ByteArray, mime: String, name: String) -> Unit,
     /** System folder picker (local, SD card, Google Drive…); permission is kept across restarts. */
     val pickFolder: (onPicked: (android.net.Uri) -> Unit) -> Unit,
     /** Opens the email app with a pre-filled crash report; the user decides whether to send. */

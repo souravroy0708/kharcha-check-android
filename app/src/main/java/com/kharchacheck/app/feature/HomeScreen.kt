@@ -21,6 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -95,6 +97,22 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { HomeHero(vm, data, onSettings = { nav.navigate(SettingsRoute) }) }
+
+        item {
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                KcCard(onClick = { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📄", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Import bank or card statement", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                            Text("PDF, Excel or CSV, up to a full year. Amounts checked against your balance; nothing is added twice.",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Pill("Import", Haldi, Ink) { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }
+                    }
+                }
+            }
+        }
 
         // Today's money thought: one of 100, unique each day, in this install's own order.
         if (data.settings.wisdomSeed != 0L) item {
@@ -229,7 +247,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             }
         } else item {
             Box(Modifier.padding(horizontal = 16.dp)) {
-                KcCard(padding = 10.dp) { recent.forEach { t -> TxnRow(t, data.catMap[t.categoryId], attached = t.id in attached) { nav.navigate(EditRoute(id = t.id)) } } }
+                KcCard(padding = 10.dp) { recent.forEach { t -> TxnRow(t, data.catMap[t.categoryId], attached = t.id in attached, hidden = data.isHidden(t)) { nav.navigate(EditRoute(id = t.id)) } } }
             }
         }
 
@@ -266,6 +284,8 @@ private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit) {
     val budget = s.monthlyBudgetPaise
     val daysLeft = (today.lengthOfMonth() - today.dayOfMonth + 1).coerceAtLeast(1)
     val left = budget - r.spendPaise
+    // 👁 toggle: mask the big numbers when showing the app to someone.
+    fun m(text: String) = if (s.maskAmounts) "₹ ••••" else text
     Hero {
         Row(verticalAlignment = Alignment.CenterVertically) {
             ProfileAvatar(vm, s.name, 42.dp, onClick = onSettings)
@@ -274,6 +294,10 @@ private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit) {
                 Text(if (s.name.isBlank()) "$greeting 👋" else "$greeting, ${s.name} 👋", style = MaterialTheme.typography.titleMedium, color = Color.White)
                 Text(today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)) + " · private to this phone 🔒",
                     style = MaterialTheme.typography.bodySmall, color = MutedOnInk)
+            }
+            IconButton(onClick = { vm.setMaskAmounts(!s.maskAmounts) }) {
+                Icon(if (s.maskAmounts) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                    contentDescription = if (s.maskAmounts) "Show amounts" else "Hide amounts", tint = Color.White)
             }
             IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = Color.White) }
         }
@@ -286,24 +310,24 @@ private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Spent", style = MaterialTheme.typography.labelSmall, color = MutedOnInk)
-                    Text(Money.compact(r.spendPaise), style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                    Text(if (budget > 0) "of ${Money.compact(budget)}" else "this month", style = MaterialTheme.typography.labelSmall, color = MutedOnInk)
+                    Text(m(Money.compact(r.spendPaise)), style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                    Text(if (budget > 0) "of ${m(Money.compact(budget))}" else "this month", style = MaterialTheme.typography.labelSmall, color = MutedOnInk)
                 }
             }
             Spacer(Modifier.width(16.dp))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                HeroLine("Today", Money.format(d.todaySpendPaise))
+                HeroLine("Today", m(Money.format(d.todaySpendPaise)))
                 if (budget > 0) {
-                    if (left >= 0) HeroLine("Safe to spend / day", Money.format(left / daysLeft), Haldi)
-                    else HeroLine("Over budget by", Money.format(-left), Coral)
+                    if (left >= 0) HeroLine("Safe to spend / day", m(Money.format(left / daysLeft)), Haldi)
+                    else HeroLine("Over budget by", m(Money.format(-left)), Coral)
                 } else HeroLine("Monthly budget", "Not set", MutedOnInk)
-                if (r.projectedSpendPaise > 0 && today.dayOfMonth >= 5) HeroLine("Month-end pace", Money.compact(r.projectedSpendPaise))
+                if (r.projectedSpendPaise > 0 && today.dayOfMonth >= 5) HeroLine("Month-end pace", m(Money.compact(r.projectedSpendPaise)))
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            HeroTile("Income", Money.compact(r.incomePaise), null, Mint, Modifier.weight(1f))
-            HeroTile("Invested", Money.compact(r.investPaise), null, Violet, Modifier.weight(1f))
-            HeroTile("Leaks", Money.compact(r.leaksPaise), null, Coral, Modifier.weight(1f))
+            HeroTile("Income", m(Money.compact(r.incomePaise)), null, Mint, Modifier.weight(1f))
+            HeroTile("Invested", m(Money.compact(r.investPaise)), null, Violet, Modifier.weight(1f))
+            HeroTile("Leaks", m(Money.compact(r.leaksPaise)), null, Coral, Modifier.weight(1f))
         }
     }
 }

@@ -256,7 +256,7 @@ private fun MonthReportView(vm: AppViewModel, nav: NavHostController, switcher: 
                     Text("Files are made on your phone and saved where you choose. Nothing is uploaded.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { platform.exportPdf("KharchaCheck-${month}.pdf") }, modifier = Modifier.weight(1f)) { Text("PDF report") }
-                        OutlinedButton(onClick = platform.exportCsv, modifier = Modifier.weight(1f)) { Text("CSV (all)") }
+                        OutlinedButton(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.ExportRoute) }, modifier = Modifier.weight(1f)) { Text("Excel / CSV") }
                     }
                 }
             }

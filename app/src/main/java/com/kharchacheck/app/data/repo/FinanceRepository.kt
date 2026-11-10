@@ -139,12 +139,18 @@ class FinanceRepository(private val db: KharchaDatabase) {
     }
 
     /** Saves rows from a statement in one transaction, either confirmed or as drafts in the Review inbox. */
-    suspend fun importAll(list: List<Txn>, asDrafts: Boolean = false): Int = db.withTransaction {
+    /** Returns the new ids, so the import can be undone in one tap. */
+    suspend fun importAll(list: List<Txn>, asDrafts: Boolean = false): List<Long> = db.withTransaction {
         val now = System.currentTimeMillis()
         val review = if (asDrafts) ReviewState.NEEDS_REVIEW else ReviewState.CONFIRMED
-        list.forEach { db.txns().upsert(it.copy(id = 0, review = review, createdAt = now, updatedAt = now).toEntity()) }
-        list.size
+        list.map { db.txns().upsert(it.copy(id = 0, review = review, createdAt = now, updatedAt = now).toEntity()) }
     }
+
+    /** Deletes many entries (chunked: SQLite allows ~999 variables per statement). */
+    suspend fun deleteIds(ids: List<Long>) = db.withTransaction { ids.chunked(500).forEach { db.txns().deleteIds(it) } }
+
+    /** Bulk delete that keeps goal balances right; returns what was deleted so it can be restored. */
+    suspend fun deleteMany(list: List<Txn>) = db.withTransaction { list.forEach { t -> db.txns().delete(t.id); adjustGoal(t.goalId, -t.amountPaise) } }
 
     suspend fun rulesList() = db.rules().all()
 
@@ -160,6 +166,7 @@ class FinanceRepository(private val db: KharchaDatabase) {
 
     suspend fun setRecurringActive(r: RecurringRule, active: Boolean) { db.recurring().upsert(r.copy(active = active).toEntity()) }
     suspend fun deleteRecurring(id: Long) = db.recurring().delete(id)
+    suspend fun saveRecurring(r: RecurringRule) { db.recurring().upsert(r.toEntity()) }
 
     /** Creates any due monthly entries (into the Review inbox). Returns how many were added. */
     suspend fun generateRecurring(today: LocalDate = LocalDate.now()): Int = db.withTransaction {

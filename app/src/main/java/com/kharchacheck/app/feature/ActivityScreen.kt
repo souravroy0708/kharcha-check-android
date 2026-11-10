@@ -51,6 +51,7 @@ import com.kharchacheck.app.ui.components.Pill
 import com.kharchacheck.app.ui.components.SubScreen
 import com.kharchacheck.app.ui.components.TxnRow
 import com.kharchacheck.app.ui.nav.EditRoute
+import com.kharchacheck.app.ui.nav.ExportRoute
 import com.kharchacheck.app.ui.nav.StatementsRoute
 import com.kharchacheck.app.ui.theme.Haldi
 import com.kharchacheck.app.ui.theme.Ink
@@ -63,7 +64,7 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private enum class Filter(val label: String) { ALL("All"), NEED("Needs"), WANT("Wants"), LEAK("Leaks"), INCOME("Income"), INVEST("Invest"), TRANSFER("Transfers"), REGRET("😬 Regret"), REVIEW("To review") }
+private enum class Filter(val label: String) { ALL("All"), IMPORTED("📄 Imported"), NEED("Needs"), WANT("Wants"), LEAK("Leaks"), INCOME("Income"), INVEST("Invest"), TRANSFER("Transfers"), REGRET("😬 Regret"), REVIEW("To review") }
 
 @Composable
 fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
@@ -83,6 +84,7 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
                     (c?.name?.lowercase()?.contains(q) == true) || Money.format(t.amountPaise).contains(q)) &&
                 when (filter) {
                     Filter.ALL -> true
+                    Filter.IMPORTED -> t.source == com.kharchacheck.app.core.model.Source.STATEMENT
                     Filter.NEED -> c?.bucket == Bucket.NEED && t.type == TxType.EXPENSE
                     Filter.WANT -> c?.bucket == Bucket.WANT && t.type == TxType.EXPENSE
                     Filter.LEAK -> c?.bucket == Bucket.LEAK && t.type == TxType.EXPENSE
@@ -97,6 +99,11 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
     val total = list.filter { it.type == TxType.EXPENSE }.sumOf { it.amountPaise }
     val files by vm.attachments.collectAsStateWithLifecycle()
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
+    var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    var moving by rememberSaveable { mutableStateOf(false) }
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+    val selecting = selectedIds.isNotEmpty()
+    fun toggle(id: Long) { selectedIds = if (id in selectedIds) selectedIds - id else selectedIds + id }
 
     Column(Modifier.fillMaxSize()) {
         Column(
@@ -104,9 +111,20 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
                 .statusBarsPadding().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            if (selecting) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${selectedIds.size} selected", style = MaterialTheme.typography.titleLarge, color = Color.White, modifier = Modifier.weight(1f))
+                Pill("All", Ink2, Color.White) { selectedIds = list.map { it.id }.toSet() }
+                Pill("🏷️", Haldi, Ink) { moving = true }
+                val chosenHidden = selectedIds.isNotEmpty() && selectedIds.all { it in data.hiddenIds }
+                Pill(if (chosenHidden) "👁 Unhide" else "🙈 Hide", Ink2, Color.White) {
+                    vm.setHidden(data.allTxns.filter { it.id in selectedIds }, !chosenHidden); selectedIds = emptySet()
+                }
+                Pill("🗑️", Ink2, com.kharchacheck.app.ui.theme.Coral) { confirmDelete = true }
+                Pill("✕", Ink2, Color.White) { selectedIds = emptySet() }
+            } else Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Activity", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.weight(1f))
                 Pill("📄 Import", Haldi, Ink, Modifier.padding(end = 4.dp)) { nav.navigate(StatementsRoute(ym.toString())) }
+                Pill("⬇ Export", Ink2, Color.White, Modifier.padding(end = 4.dp)) { nav.navigate(ExportRoute) }
                 if (query.isBlank()) {
                     IconButton(onClick = { month = ym.minusMonths(1).toString() }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Previous month", tint = Color.White) }
                     Text(ym.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)), style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -141,18 +159,40 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
 
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item {
-                Text("${list.size} entries" + if (total > 0) " · ${Money.format(total)} spent" else "",
+                Text("${list.size} entries" + (if (total > 0) " · ${Money.format(total)} spent" else "") + if (!selecting) " · long-press to select" else "",
                     style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted, modifier = Modifier.padding(start = 4.dp))
             }
             list.groupBy { it.date }.forEach { (date, dayList) ->
-                item(key = "d-$date") { DayGroup(date, dayList, data.catMap, attached) { nav.navigate(EditRoute(id = it.id)) } }
+                item(key = "d-$date") {
+                    DayGroup(date, dayList, data.catMap, attached, selectedIds, data.hiddenIds, onLong = { toggle(it.id) }) { t ->
+                        if (selecting) toggle(t.id) else nav.navigate(EditRoute(id = t.id))
+                    }
+                }
             }
         }
     }
+    BulkDialogs(vm, data, selectedIds, moving, confirmDelete,
+        onMoved = { moving = false; selectedIds = emptySet() }, onDeleted = { confirmDelete = false; selectedIds = emptySet() },
+        onDismiss = { moving = false; confirmDelete = false })
 }
 
 @Composable
-private fun DayGroup(date: LocalDate, list: List<Txn>, cats: Map<Long, com.kharchacheck.app.core.model.Category>, attached: Set<Long>, onOpen: (Txn) -> Unit) {
+private fun BulkDialogs(vm: AppViewModel, data: com.kharchacheck.app.ui.AppData, ids: Set<Long>, moving: Boolean, confirmDelete: Boolean,
+                        onMoved: () -> Unit, onDeleted: () -> Unit, onDismiss: () -> Unit) {
+    val chosen = data.txns.filter { it.id in ids }
+    if (moving) CategorySheet(data.activeCategories, 0, onPick = { c -> vm.recategorize(chosen, c); onMoved() }, onNew = onDismiss, onDismiss = onDismiss)
+    if (confirmDelete) androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Delete ${chosen.size} entries?") },
+        text = { Text("You can undo right after.") },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = { vm.deleteMany(chosen); onDeleted() }) { Text("Delete", color = com.kharchacheck.app.ui.theme.Coral) } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onDismiss) { Text("Keep") } },
+    )
+}
+
+@Composable
+private fun DayGroup(date: LocalDate, list: List<Txn>, cats: Map<Long, com.kharchacheck.app.core.model.Category>, attached: Set<Long>,
+                     selected: Set<Long>, hidden: Set<Long>, onLong: (Txn) -> Unit, onOpen: (Txn) -> Unit) {
     val today = LocalDate.now()
     val label = when (date) { today -> "Today"; today.minusDays(1) -> "Yesterday"; else -> date.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale.ENGLISH)) }
     val spent = list.filter { it.type == TxType.EXPENSE }.sumOf { it.amountPaise }
@@ -161,7 +201,7 @@ private fun DayGroup(date: LocalDate, list: List<Txn>, cats: Map<Long, com.kharc
             Text(label, style = MaterialTheme.typography.titleMedium, color = Kc.colors.text, modifier = Modifier.weight(1f))
             if (spent > 0) Text("−${Money.format(spent)}", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted)
         }
-        list.forEach { t -> TxnRow(t, cats[t.categoryId], attached = t.id in attached) { onOpen(t) } }
+        list.forEach { t -> TxnRow(t, cats[t.categoryId], attached = t.id in attached, selected = t.id in selected, hidden = t.id in hidden, onLongClick = { onLong(t) }) { onOpen(t) } }
     }
 }
 

@@ -34,7 +34,7 @@ class DailyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         val added = c.finance.generateRecurring(today)
         if (added > 0) Notifier.post(applicationContext, 2003, Notifier.CH_REMINDERS, "🔁 $added repeating ${if (added == 1) "entry" else "entries"} added",
             "Rent, EMIs, SIPs or subscriptions due today. Tap to confirm or edit.", "inbox")
-        val txns = c.finance.txns.first()
+        val txns = c.finance.txns.first().filterNot { it.id in s.hiddenIds }  // hidden entries never reach notifications
         val cats = c.finance.categories.first().associateBy { it.id }
 
         if (today.dayOfMonth == 1) {

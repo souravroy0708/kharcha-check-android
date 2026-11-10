@@ -32,7 +32,7 @@ class MorningTipWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
         val w = DailyWisdom.forDate(today, s.wisdomSeed)
         var text = "${w.line}\n\nTry today: ${w.doToday}"
         if (w.kind == WisdomKind.CUT) {
-            val txns = c.finance.txns.first()
+            val txns = c.finance.txns.first().filterNot { it.id in s.hiddenIds }  // hidden entries never reach notifications
             val cats = c.finance.categories.first().associateBy { it.id }
             val r = ReportEngine.build(YearMonth.from(today), txns, cats)
             OnlineSpending.biggestLeak(r.categories)?.let { leak ->

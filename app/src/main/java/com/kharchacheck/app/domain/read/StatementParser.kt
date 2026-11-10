@@ -212,14 +212,14 @@ object StatementParser {
         return Result(rows, creditCard)
     }
 
-    private fun parseDateCell(s: String, hint: YearMonth): LocalDate? {
+    fun parseDateCell(s: String, hint: YearMonth): LocalDate? {
         // Excel stores dates as day numbers since 1899-12-30 (e.g. 46327 = 2026-11-01).
         s.trim().toDoubleOrNull()?.let { n -> if (n in 30_000.0..80_000.0) return LocalDate.of(1899, 12, 30).plusDays(n.toLong()) }
         val m = listOf(D_ISO, D_NUM, D_NAMED).firstNotNullOfOrNull { it.find(s) } ?: return null
         return toDate(m, hint)
     }
 
-    private fun money(s: String): Long? {
+    fun money(s: String): Long? {
         val c = s.replace(Regex("""[₹,\s]|INR|Rs\.?|Cr|Dr""", RegexOption.IGNORE_CASE), "").trimStart('-', '+')
         if (c.isEmpty()) return null
         val v = c.toBigDecimalOrNull() ?: return null

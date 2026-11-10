@@ -184,6 +184,10 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                     else vm.say("Set a screen lock on your phone first (Settings → Security).")
                 }
                 SwitchRow("Hide in recent apps & block screenshots", "Recommended for a money app", s.secureScreen) { vm.setSecureScreen(it) }
+                SettingRow("🙈 Hidden entries", if (data.revealed) "${data.hiddenIds.size} hidden · visible until you leave the app" else "Locked. Private entries others shouldn't see") {
+                    nav.navigate(com.kharchacheck.app.ui.nav.HiddenRoute)
+                }
+                SwitchRow("👁 Hide amounts on Home", "Masks the big numbers, for when you show someone the app. Also on the Home eye icon.", s.maskAmounts) { vm.setMaskAmounts(it) }
             }
         }
         item {
@@ -202,7 +206,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 SettingRow("Backup with password", "Save an encrypted .kcbak file anywhere you choose") { dlg = Dlg.BACKUP }
                 SettingRow("Restore from backup", "Replaces everything on this phone") { dlg = Dlg.RESTORE }
                 SettingRow("Statements & receipts", "Bank, credit card and UPI statements by month") { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }
-                SettingRow("Export all entries (CSV)", "Open in Excel or Google Sheets") { p.exportCsv() }
+                SettingRow("⬇ Export entries (Excel or CSV)", "Any period, with monthly and category summaries") { nav.navigate(com.kharchacheck.app.ui.nav.ExportRoute) }
                 HorizontalDivider(color = Kc.colors.line)
                 SettingRow("Delete everything", "Erase all entries, goals and settings from this phone") { dlg = Dlg.WIPE }
             }
@@ -451,6 +455,7 @@ fun RecurringScreen(vm: AppViewModel, nav: NavHostController) {
     val rules by vm.recurring.collectAsStateWithLifecycle()
     val data = d ?: return
     var stopping by remember { mutableStateOf<com.kharchacheck.app.domain.RecurringRule?>(null) }
+    var editingRule by remember { mutableStateOf<com.kharchacheck.app.domain.RecurringRule?>(null) }
     SubScreen("Repeating entries", onBack = { nav.popBackStack() }) {
         item {
             Text("Each one is added to your Review inbox on its day, so you can confirm, change the amount, or skip it. " +
@@ -469,11 +474,33 @@ fun RecurringScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Pill("✎ Edit", Kc.colors.chip, Kc.colors.text) { editingRule = r }
                     Pill(if (r.active) "Pause" else "Resume", Kc.colors.chip, Kc.colors.text) { vm.setRecurringActive(r, !r.active) }
                     Pill("Stop", Kc.colors.warnBg, Coral) { stopping = r }
                 }
             }
         }
+    }
+    editingRule?.let { r ->
+        var amt by rememberSaveable { mutableStateOf((r.amountPaise / 100).toString()) }
+        var day by rememberSaveable { mutableStateOf(r.dayOfMonth.toString()) }
+        var payee by rememberSaveable { mutableStateOf(r.payee) }
+        val ok = Money.parse(amt) != null && day.toIntOrNull() in 1..31
+        AlertDialog(
+            onDismissRequest = { editingRule = null },
+            title = { Text("Edit repeating entry") },
+            text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Name / payee") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(amt, { v -> amt = v.filter { it.isDigit() || it == '.' }.take(10) }, label = { Text("Amount") }, prefix = { Text("₹ ") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(day, { v -> day = v.filter(Char::isDigit).take(2) }, label = { Text("Day of month (1–31)") }, singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
+            } },
+            confirmButton = { TextButton(enabled = ok, onClick = {
+                vm.saveRecurring(r.copy(payee = payee.trim(), amountPaise = Money.parse(amt) ?: r.amountPaise, dayOfMonth = day.toInt())); editingRule = null
+            }) { Text("Save") } },
+            dismissButton = { TextButton(onClick = { editingRule = null }) { Text("Cancel") } },
+        )
     }
     stopping?.let { r ->
         AlertDialog(

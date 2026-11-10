@@ -35,3 +35,9 @@
 | User-controlled crash reports | `work/CrashReporter.kt`, `ui/Root.kt` |
 | Smart Money Guide: salary plan, money ladder, SIP split, online-spending traps | `domain/SalaryPlanner.kt`, `domain/OnlineSpending.kt`, `feature/GuideScreen.kt` |
 | Daily morning tip notification + "I did it" XP loop, new badges | `work/MorningTipWorker.kt`, `feature/HomeScreen.kt`, `domain/Gamification.kt` |
+| Position-aware PDF statement table reader | `domain/read/PdfTable.kt`, `read/AutoReader.kt` (`GlyphStripper`) |
+| Duplicate-proof imports | `domain/Dedupe.kt`, `feature/ImportScreen.kt` |
+| Excel / CSV export screen | `domain/export/Exporter.kt`, `domain/export/XlsxWriter.kt`, `feature/ExportScreen.kt` |
+| Bulk edit (multi-select), undo | `feature/ActivityScreen.kt`, `ui/AppViewModel.kt` |
+| Hidden entries (biometric unlock), mask amounts | `ui/AppViewModel.kt` (`derive`), `feature/HiddenScreen.kt`, `feature/HomeScreen.kt`, `MainActivity.kt` (`onStop`) |
+| Import history with batch delete | `feature/StatementsScreen.kt`, `ui/AppViewModel.kt` (`deleteImportBatch`) |

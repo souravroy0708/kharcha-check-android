@@ -54,11 +54,14 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val monthFmt = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+private val dFmtShort = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
 
 /** Monthly statements kept next to your entries: bank, credit card and UPI app. Reference only, never parsed or sent. */
 @Composable
 fun StatementsScreen(vm: AppViewModel, nav: NavHostController, route: StatementsRoute) {
     val all by vm.attachments.collectAsStateWithLifecycle()
+    val dd by vm.data.collectAsStateWithLifecycle()
+    var deleting by remember { mutableStateOf<List<com.kharchacheck.app.core.model.Txn>?>(null) }
     val settings by vm.settings.collectAsStateWithLifecycle()
     val autoRead = settings?.autoRead != false
     val p = LocalPlatform.current
@@ -112,6 +115,27 @@ fun StatementsScreen(vm: AppViewModel, nav: NavHostController, route: Statements
                 else Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
             }
         }
+        // Import history: entries from one statement import share their creation time.
+        val batches = dd?.allTxns.orEmpty().filter { it.source == com.kharchacheck.app.core.model.Source.STATEMENT }
+            .groupBy { it.createdAt }.entries.sortedByDescending { it.key }.take(12)
+        if (batches.isNotEmpty()) item {
+            KcCard(title = "Import history") {
+                Text("Imported something wrong? Delete a whole import here (you can undo). Single entries: long-press them in Activity.",
+                    style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                batches.forEach { (at, list) ->
+                    val when_ = java.time.Instant.ofEpochMilli(at).atZone(java.time.ZoneId.systemDefault())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("${list.size} entries · imported ${when_.format(DateTimeFormatter.ofPattern("d MMM, h:mm a", Locale.ENGLISH))}",
+                                style = MaterialTheme.typography.titleSmall, color = Kc.colors.text)
+                            Text("${list.minOf { it.date }.format(dFmtShort)} to ${list.maxOf { it.date }.format(dFmtShort)}",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Pill("🗑️ Delete", Kc.colors.warnBg, com.kharchacheck.app.ui.theme.Coral) { deleting = list }
+                    }
+                }
+            }
+        }
         if (otherMonths.isNotEmpty()) item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
                 Text("Other months", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
@@ -129,6 +153,15 @@ fun StatementsScreen(vm: AppViewModel, nav: NavHostController, route: Statements
         p.pickDocument { uri -> vm.addStatement(uri, kind, ym, label) { a -> if (autoRead) nav.navigate(ImportRoute(a.id)) } }
     }
     viewing?.let { a -> AttachmentViewer(vm, a, onDismiss = { viewing = null }, onDelete = { vm.removeAttachment(a); viewing = null }) }
+    deleting?.let { list ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete ${list.size} imported entries?") },
+            text = { Text("Removes every entry this import added, including ones you edited since. You can undo right after.") },
+            confirmButton = { TextButton(onClick = { vm.deleteImportBatch(list.map { it.id }); deleting = null }) { Text("Delete", color = com.kharchacheck.app.ui.theme.Coral) } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Keep") } },
+        )
+    }
 }
 
 @Composable

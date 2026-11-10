@@ -63,6 +63,7 @@ data class AppData(
     val settings: Settings,
     val categories: List<Category>,
     val catMap: Map<Long, Category>,
+    /** Entries the screens show: hidden ("private") entries are left out unless the user has unlocked them. */
     val txns: List<Txn>,
     val budgets: Map<Long, Long>,
     val goals: List<Goal>,
@@ -71,11 +72,17 @@ data class AppData(
     val challenge: ChallengeProgress?,
     val inbox: List<Txn>,
     val todaySpendPaise: Long,
+    /** Every entry including hidden ones. Only for duplicate checks, never for display. */
+    val allTxns: List<Txn> = txns,
+    val hiddenIds: Set<Long> = emptySet(),
+    val revealed: Boolean = false,
 ) {
+    fun isHidden(t: Txn) = t.id in hiddenIds
     val activeCategories: List<Category> get() = categories.filter { !it.archived }
 }
 
-data class UiMessage(val text: String, val undo: Txn? = null)
+/** A snackbar message, optionally with one action (usually "Undo"). */
+data class UiMessage(val text: String, val actionLabel: String? = null, val action: (() -> Unit)? = null)
 
 data class Win(val emoji: String, val title: String, val body: String)
 
@@ -88,8 +95,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val settings: StateFlow<Settings?> = c.settings.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    /** Hidden entries are shown only after unlocking, until the app goes to the background. */
+    private val _revealed = MutableStateFlow(false)
+    val revealed: StateFlow<Boolean> = _revealed.asStateFlow()
+
     val data: StateFlow<AppData?> = combine(c.settings.settings, repo.categories, repo.txns, repo.budgets, repo.goals) { s, cats, t, b, g -> Raw(s, cats, t, b, g) }
-        .map { derive(it) }
+        .combine(_revealed) { raw, rev -> derive(raw, rev) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -150,7 +161,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         expectedReturnPct = s.expectedReturnPct.toDouble(), noSpendDays = s.noSpendDays,
     )
 
-    private fun derive(r: Raw): AppData {
+    private fun derive(raw: Raw, revealed: Boolean): AppData {
+        val hidden = raw.s.hiddenIds
+        val r = if (revealed || hidden.isEmpty()) raw else raw.copy(t = raw.t.filterNot { it.id in hidden })
         val map = r.c.associateBy { it.id }
         val today = LocalDate.now()
         val report = ReportEngine.build(YearMonth.from(today), r.t, map, reportConfig(r.s, r.b))
@@ -160,7 +173,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Gamification.progress(it, LocalDate.ofEpochDay(r.s.challengeStartDay), r.t, map, r.s.noSpendDays, today)
         }
         val todaySpend = r.t.filter { it.date == today && it.type == TxType.EXPENSE && map[it.categoryId]?.bucket?.isSpend != false }.sumOf { it.amountPaise }
-        return AppData(r.s, r.c, map, r.t, r.b, r.g, report, game, ch, r.t.filter { it.review == ReviewState.NEEDS_REVIEW }, todaySpend)
+        return AppData(r.s, r.c, map, r.t, r.b, r.g, report, game, ch, r.t.filter { it.review == ReviewState.NEEDS_REVIEW }, todaySpend,
+            allTxns = raw.t, hiddenIds = hidden, revealed = revealed)
     }
 
     /** New badge or finished challenge → one celebration at a time, never repeated. */
@@ -192,8 +206,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     data class SplitRequest(val names: List<String>, val eachPaise: Long, val totalPaise: Long)
 
     fun save(t: Txn, rememberPayeeRule: Boolean, repeatMonthly: Boolean = false, attachmentIds: List<Long> = emptyList(),
-             split: SplitRequest? = null, after: () -> Unit = {}) = viewModelScope.launch {
+             split: SplitRequest? = null, hidden: Boolean? = null, after: () -> Unit = {}) = viewModelScope.launch {
         val id = repo.saveTxn(t.copy(review = ReviewState.CONFIRMED))
+        if (hidden != null) c.settings.setHidden(listOf(id), hidden)
         c.files.link(attachmentIds, id)
         if (split != null && split.names.isNotEmpty()) {
             c.tools.addSplit(id, split.names, split.eachPaise, t.payee.ifBlank { "Split bill" } + " · total " + com.kharchacheck.app.core.model.Money.format(split.totalPaise), t.date)
@@ -204,11 +219,41 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun delete(t: Txn) = viewModelScope.launch {
-        repo.deleteTxn(t)
-        _messages.trySend(UiMessage("Deleted ${com.kharchacheck.app.core.model.Money.format(t.amountPaise)}", undo = t))
+        repo.deleteTxn(t); c.settings.setHidden(listOf(t.id), false)
+        _messages.trySend(UiMessage("Deleted ${com.kharchacheck.app.core.model.Money.format(t.amountPaise)}", "Undo") { restore(t) })
     }
 
     fun restore(t: Txn) = viewModelScope.launch { repo.saveTxn(t) }
+
+    // ---- Bulk edit (Activity multi-select) ----
+    fun deleteMany(list: List<Txn>) = viewModelScope.launch {
+        repo.deleteMany(list); c.settings.setHidden(list.map { it.id }, false)
+        _messages.trySend(UiMessage("Deleted ${list.size} entries", "Undo") { viewModelScope.launch { list.forEach { repo.saveTxn(it) } } })
+    }
+    fun recategorize(list: List<Txn>, cat: Category) = viewModelScope.launch {
+        list.forEach { repo.saveTxn(it.copy(categoryId = cat.id, type = cat.bucket.type, review = ReviewState.CONFIRMED)) }
+        _messages.trySend(UiMessage("Moved ${list.size} to ${cat.emoji} ${cat.name}", "Undo") { viewModelScope.launch { list.forEach { repo.saveTxn(it) } } })
+    }
+    fun confirmImported(ids: List<Long>, text: String) {
+        _messages.trySend(UiMessage(text, "Undo") { viewModelScope.launch { repo.deleteIds(ids); say("Import undone") } })
+    }
+
+    /** One statement import = the entries it created (same source and the same creation time). */
+    fun deleteImportBatch(ids: List<Long>) = viewModelScope.launch {
+        val before = data.value?.allTxns?.filter { it.id in ids.toSet() }.orEmpty()
+        repo.deleteIds(ids); c.settings.setHidden(ids, false)
+        _messages.trySend(UiMessage("Deleted ${ids.size} imported entries", "Undo") { viewModelScope.launch { before.forEach { repo.saveTxn(it) } } })
+    }
+
+    // ---- Hidden ("private") entries ----
+    fun setHidden(list: List<Txn>, hidden: Boolean) = viewModelScope.launch {
+        c.settings.setHidden(list.map { it.id }, hidden)
+        if (hidden && !_revealed.value) say(if (list.size == 1) "Entry hidden 🙈 Find it in Settings → Hidden entries" else "${list.size} entries hidden 🙈")
+        else if (!hidden) say(if (list.size == 1) "Entry visible again" else "${list.size} entries visible again")
+    }
+    fun reveal() { _revealed.value = true }
+    fun hideAgain() { _revealed.value = false }
+    fun setMaskAmounts(v: Boolean) = viewModelScope.launch { c.settings.setMaskAmounts(v) }
 
     fun confirmAll(ids: List<Long>) = viewModelScope.launch { repo.confirm(ids); say("Confirmed ${ids.size} entries ✓") }
 
@@ -314,6 +359,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setRecurringActive(r: RecurringRule, on: Boolean) = viewModelScope.launch { repo.setRecurringActive(r, on) }
+    fun saveRecurring(r: RecurringRule) = viewModelScope.launch { repo.saveRecurring(r); say("Updated ✓") }
     fun deleteRecurring(r: RecurringRule) = viewModelScope.launch { repo.deleteRecurring(r.id); say("Stopped repeating") }
 
     // ---- Wealth: investments & net worth ----

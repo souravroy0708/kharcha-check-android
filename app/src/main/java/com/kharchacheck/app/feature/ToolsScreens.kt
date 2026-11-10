@@ -66,6 +66,7 @@ fun DuesScreen(vm: AppViewModel, nav: NavHostController) {
     val dues by vm.dues.collectAsStateWithLifecycle()
     val p = LocalPlatform.current
     var adding by rememberSaveable { mutableStateOf(false) }
+    var editingDue by remember { mutableStateOf<Due?>(null) }
     var showSettled by rememberSaveable { mutableStateOf(false) }
     val balances = Dues.balances(dues)
     val open = dues.filter { !it.settled }
@@ -109,19 +110,20 @@ fun DuesScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
         if (open.isNotEmpty()) item { Text("Open items", style = MaterialTheme.typography.titleLarge, color = Kc.colors.text, modifier = Modifier.padding(top = 6.dp)) }
-        items(open, key = { "o-" + it.id }) { d -> DueRow(d, onSettle = { vm.settleDue(d) }, onDelete = { vm.deleteDue(d) }) }
+        items(open, key = { "o-" + it.id }) { d -> DueRow(d, onSettle = { vm.settleDue(d) }, onDelete = { vm.deleteDue(d) }, onEdit = { editingDue = d }) }
         if (settled.isNotEmpty()) item {
             Text(if (showSettled) "Hide settled" else "Show settled (${settled.size})", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted,
                 modifier = Modifier.clickable { showSettled = !showSettled }.padding(vertical = 8.dp))
         }
-        if (showSettled) items(settled.take(30), key = { "s-" + it.id }) { d -> DueRow(d, onSettle = null, onDelete = { vm.deleteDue(d) }) }
+        if (showSettled) items(settled.take(30), key = { "s-" + it.id }) { d -> DueRow(d, onSettle = null, onDelete = { vm.deleteDue(d) }, onEdit = { editingDue = d }) }
     }
-    if (adding) DueDialog(onDismiss = { adding = false }) { vm.saveDue(it); adding = false }
+    if (adding) DueDialog(null, onDismiss = { adding = false }) { vm.saveDue(it); adding = false }
+    editingDue?.let { e -> DueDialog(e, onDismiss = { editingDue = null }) { vm.saveDue(it); editingDue = null } }
 }
 
 @Composable
-private fun DueRow(d: Due, onSettle: (() -> Unit)?, onDelete: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Kc.colors.card).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun DueRow(d: Due, onSettle: (() -> Unit)?, onDelete: () -> Unit, onEdit: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Kc.colors.card).clickable(onClick = onEdit).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("${d.person} · ${if (d.direction == DueDirection.THEY_OWE) "owes you" else "you owe"}", style = MaterialTheme.typography.titleSmall, color = Kc.colors.text)
             Text(listOf(d.note, d.date.format(dFmt)).filter { it.isNotBlank() }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 2)
@@ -137,15 +139,15 @@ private fun DueRow(d: Due, onSettle: (() -> Unit)?, onDelete: () -> Unit) {
 }
 
 @Composable
-private fun DueDialog(onDismiss: () -> Unit, onSave: (Due) -> Unit) {
-    var person by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
-    var note by rememberSaveable { mutableStateOf("") }
-    var dir by rememberSaveable { mutableStateOf(0) }
+private fun DueDialog(existing: Due?, onDismiss: () -> Unit, onSave: (Due) -> Unit) {
+    var person by rememberSaveable { mutableStateOf(existing?.person ?: "") }
+    var amount by rememberSaveable { mutableStateOf(existing?.amountPaise?.let { if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(it / 100, it % 100) } ?: "") }
+    var note by rememberSaveable { mutableStateOf(existing?.note ?: "") }
+    var dir by rememberSaveable { mutableStateOf(if (existing?.direction == DueDirection.I_OWE) 1 else 0) }
     val paise = Money.parse(amount)
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add a due") },
+        title = { Text(if (existing == null) "Add a due" else "Edit due") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Segmented(listOf("They owe me", "I owe them"), dir) { dir = it }
@@ -157,7 +159,8 @@ private fun DueDialog(onDismiss: () -> Unit, onSave: (Due) -> Unit) {
             }
         },
         confirmButton = { TextButton(enabled = person.isNotBlank() && paise != null, onClick = {
-            onSave(Due(person = person.trim(), amountPaise = paise ?: 0, direction = if (dir == 0) DueDirection.THEY_OWE else DueDirection.I_OWE, note = note.trim()))
+            val base = existing ?: Due(person = "", amountPaise = 0, direction = DueDirection.THEY_OWE)
+            onSave(base.copy(person = person.trim(), amountPaise = paise ?: 0, direction = if (dir == 0) DueDirection.THEY_OWE else DueDirection.I_OWE, note = note.trim()))
         }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

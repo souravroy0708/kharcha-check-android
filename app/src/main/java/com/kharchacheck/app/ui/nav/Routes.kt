@@ -24,3 +24,5 @@ import kotlinx.serialization.Serializable
 @Serializable data class WrappedRoute(val period: String)
 @Serializable object WealthRoute
 @Serializable data class GuideRoute(val tab: Int = 0)
+@Serializable object ExportRoute
+@Serializable object HiddenRoute

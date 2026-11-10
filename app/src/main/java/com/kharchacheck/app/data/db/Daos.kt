@@ -26,6 +26,7 @@ interface TxnDao {
     @Upsert suspend fun upsert(t: TxnEntity): Long
     @Insert suspend fun insertAll(list: List<TxnEntity>)
     @Query("DELETE FROM transactions WHERE id = :id") suspend fun delete(id: Long)
+    @Query("DELETE FROM transactions WHERE id IN (:ids)") suspend fun deleteIds(ids: List<Long>)
     @Query("UPDATE transactions SET review = 'CONFIRMED' WHERE id IN (:ids)") suspend fun confirm(ids: List<Long>)
     @Query("UPDATE transactions SET categoryId = :to WHERE categoryId = :from") suspend fun moveCategory(from: Long, to: Long)
     @Query("SELECT COUNT(*) FROM transactions WHERE refNo = :ref AND refNo != ''") suspend fun countRef(ref: String): Int

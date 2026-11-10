@@ -8,6 +8,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -179,16 +180,21 @@ fun CategoryIcon(category: Category?, size: Dp = 42.dp) {
 
 private val rowTime = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-fun TxnRow(txn: Txn, category: Category?, attached: Boolean = false, onClick: () -> Unit) {
+fun TxnRow(txn: Txn, category: Category?, attached: Boolean = false, selected: Boolean = false, hidden: Boolean = false, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     val sign = when (txn.type) { TxType.INCOME -> "+"; TxType.EXPENSE -> "−"; else -> "" }
     val amountColor = when (txn.type) { TxType.INCOME -> Kc.colors.good; TxType.INVEST -> Mint; TxType.TRANSFER -> Kc.colors.muted; else -> Kc.colors.text }
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(vertical = 8.dp, horizontal = 4.dp)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+            .background(if (selected) Haldi.copy(alpha = 0.3f) else Color.Transparent)
+            .then(if (onLongClick != null) Modifier.combinedClickable(onLongClick = onLongClick, onClick = onClick) else Modifier.clickable(onClick = onClick))
+            .padding(vertical = 8.dp, horizontal = 4.dp)
             .semantics(mergeDescendants = true) {},
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        CategoryIcon(category)
+        if (selected) Box(Modifier.size(42.dp).clip(CircleShape).background(Haldi), contentAlignment = Alignment.Center) { Text("✓", color = Ink, style = MaterialTheme.typography.titleLarge) }
+        else CategoryIcon(category)
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(txn.payee.ifBlank { category?.name ?: "Entry" }, style = MaterialTheme.typography.titleMedium, color = Kc.colors.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -198,6 +204,7 @@ fun TxnRow(txn: Txn, category: Category?, attached: Boolean = false, onClick: ()
                 add(txn.mode.label)
                 if (txn.worth.emoji.isNotEmpty()) add(txn.worth.emoji)
                 if (attached) add("📎")
+                if (hidden) add("🙈 hidden")
             }.filter { it.isNotBlank() }.joinToString(" · ")
             Text(meta, style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

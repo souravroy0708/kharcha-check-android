@@ -53,6 +53,12 @@ data class Settings(
     val dependents: Boolean = false,
     val risk: String = "BALANCED",
     val emergencySavedPaise: Long = 0,
+    /** "sha256|epochDay" of statement files already imported, to tell the user they've seen this file. */
+    val importedFiles: Set<String> = emptySet(),
+    /** Entries hidden from everyday view ("private"); shown only after the user unlocks with biometrics/screen lock. */
+    val hiddenIds: Set<Long> = emptySet(),
+    /** Mask the big amounts on Home (for showing the app to someone). */
+    val maskAmounts: Boolean = false,
 )
 
 private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -92,6 +98,9 @@ class SettingsRepository(private val context: Context) {
         val dependents = booleanPreferencesKey("dependents")
         val risk = stringPreferencesKey("risk")
         val emergencySaved = longPreferencesKey("emergency_saved")
+        val importedFiles = stringSetPreferencesKey("imported_files")
+        val hidden = stringSetPreferencesKey("hidden_ids")
+        val mask = booleanPreferencesKey("mask_amounts")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -128,6 +137,9 @@ class SettingsRepository(private val context: Context) {
             dependents = p[K.dependents] ?: false,
             risk = p[K.risk] ?: "BALANCED",
             emergencySavedPaise = p[K.emergencySaved] ?: 0,
+            importedFiles = p[K.importedFiles].orEmpty(),
+            hiddenIds = p[K.hidden].orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
+            maskAmounts = p[K.mask] ?: false,
         )
     }
 
@@ -159,6 +171,15 @@ class SettingsRepository(private val context: Context) {
     suspend fun setPlanProfile(dependents: Boolean, risk: String, emergencySaved: Long) = context.store.edit {
         it[K.dependents] = dependents; it[K.risk] = risk; it[K.emergencySaved] = emergencySaved
     }
+    suspend fun rememberImportedFile(sha: String) = context.store.edit {
+        val cur = it[K.importedFiles].orEmpty().filterNot { e -> e.startsWith("$sha|") }.toSet()
+        it[K.importedFiles] = (cur + "$sha|${java.time.LocalDate.now().toEpochDay()}").toList().takeLast(200).toSet()
+    }
+    suspend fun setHidden(ids: Collection<Long>, hidden: Boolean) = context.store.edit {
+        val cur = it[K.hidden].orEmpty(); val add = ids.map(Long::toString)
+        it[K.hidden] = if (hidden) cur + add else cur - add.toSet()
+    }
+    suspend fun setMaskAmounts(v: Boolean) = context.store.edit { it[K.mask] = v }
     suspend fun setSmsCapture(v: Boolean) = context.store.edit { it[K.sms] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
 
@@ -181,6 +202,7 @@ class SettingsRepository(private val context: Context) {
         it[K.won] = s.challengesWon; it[K.celebrated] = s.celebratedBadges
         it[K.practiced] = s.practicedTipDays.map(Long::toString).toSet(); it[K.planDone] = s.planDone
         it[K.dependents] = s.dependents; it[K.risk] = s.risk; it[K.emergencySaved] = s.emergencySavedPaise
+        it[K.hidden] = s.hiddenIds.map(Long::toString).toSet()
     }
 
     suspend fun ensureWisdomSeed() = context.store.edit {

@@ -94,7 +94,7 @@ class MainActivity : FragmentActivity() {
     private val docPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         uri?.let { docCallback?.invoke(it) }; docCallback = null
     }
-    private val copyDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+    private val copyDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
         val bytes = pendingCopy; pendingCopy = null
         if (uri != null && bytes != null) {
             runCatching { contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) } }
@@ -149,6 +149,15 @@ class MainActivity : FragmentActivity() {
             pickDocument = { cb -> docCallback = cb; docPicker.launch(arrayOf("application/pdf", "image/*", "text/csv", "text/comma-separated-values", "text/plain", "text/tab-separated-values", "application/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")) },
             openExternally = { bytes, mime, name -> openExternally(bytes, mime, name) },
             saveCopy = { bytes, _, name -> pendingCopy = bytes; copyDoc.launch(name) },
+            shareFile = { bytes, mime, name ->
+                runCatching {
+                    val dir = File(cacheDir, "share").apply { mkdirs() }
+                    val file = File(dir, name.replace(Regex("[^A-Za-z0-9._ -]"), "_")).apply { writeBytes(bytes) }
+                    val uri = FileProvider.getUriForFile(this, "$packageName.files", file)
+                    val send = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    startActivity(Intent.createChooser(send, "Share export"))
+                }.onFailure { vm.say("Couldn't share the file") }
+            },
             shareImage = { bmp, text ->
                 runCatching {
                     val dir = File(cacheDir, "share").apply { mkdirs() }
@@ -197,6 +206,8 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         stoppedAt = SystemClock.elapsedRealtime()
+        // Hidden entries go back into hiding whenever the app leaves the screen.
+        if (!isChangingConfigurations) vm.hideAgain()
     }
 
     override fun onStart() {

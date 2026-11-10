@@ -64,6 +64,8 @@ import com.kharchacheck.app.feature.BillsScreen
 import com.kharchacheck.app.feature.DuesScreen
 import com.kharchacheck.app.feature.WealthScreen
 import com.kharchacheck.app.feature.GuideScreen
+import com.kharchacheck.app.feature.ExportScreen
+import com.kharchacheck.app.feature.HiddenScreen
 import com.kharchacheck.app.feature.WrappedScreen
 import com.kharchacheck.app.feature.CategoryInsightsScreen
 import com.kharchacheck.app.feature.ReportScreen
@@ -84,6 +86,8 @@ import com.kharchacheck.app.ui.nav.BillsRoute
 import com.kharchacheck.app.ui.nav.DuesRoute
 import com.kharchacheck.app.ui.nav.WealthRoute
 import com.kharchacheck.app.ui.nav.GuideRoute
+import com.kharchacheck.app.ui.nav.ExportRoute
+import com.kharchacheck.app.ui.nav.HiddenRoute
 import com.kharchacheck.app.ui.nav.WrappedRoute
 import com.kharchacheck.app.ui.nav.CategoryInsightsRoute
 import com.kharchacheck.app.ui.nav.ReportRoute
@@ -132,8 +136,9 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
 
     LaunchedEffect(Unit) {
         vm.messages.collect { m ->
-            val r = snackbar.showSnackbar(m.text, actionLabel = if (m.undo != null) "Undo" else null, withDismissAction = m.undo == null)
-            if (r == SnackbarResult.ActionPerformed && m.undo != null) vm.restore(m.undo)
+            val r = snackbar.showSnackbar(m.text, actionLabel = m.actionLabel, withDismissAction = m.action == null,
+                duration = if (m.action != null) androidx.compose.material3.SnackbarDuration.Long else androidx.compose.material3.SnackbarDuration.Short)
+            if (r == SnackbarResult.ActionPerformed) m.action?.invoke()
         }
     }
     LaunchedEffect(Unit) {
@@ -211,6 +216,8 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
                 composable<WealthRoute> { WealthScreen(vm, nav) }
+                composable<ExportRoute> { ExportScreen(vm, nav) }
+                composable<HiddenRoute> { HiddenScreen(vm, nav) }
                 composable<GuideRoute> { e -> GuideScreen(vm, nav, e.toRoute<GuideRoute>()) }
                 composable<BillsRoute> { BillsScreen(vm, nav) }
                 composable<WrappedRoute> { e -> WrappedScreen(vm, nav, e.toRoute<WrappedRoute>()) }
