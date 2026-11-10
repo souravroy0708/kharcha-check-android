@@ -78,7 +78,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private enum class Dlg { AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE, SMS_INFO }
+private enum class Dlg { TIP_TIME, AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE, SMS_INFO }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -157,6 +157,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             KcCard(title = "Money tools") {
                 val dues = vm.dues.collectAsStateWithLifecycle().value
                 val bills = vm.bills.collectAsStateWithLifecycle().value
+                SettingRow("📘 Smart Money Guide", "Salary plan, investing best practices, online spending traps") { nav.navigate(com.kharchacheck.app.ui.nav.GuideRoute()) }
                 SettingRow("💼 Wealth & net worth", "Mutual funds with daily prices, FDs, PPF, bank balances, loans") { nav.navigate(WealthRoute) }
                 SettingRow("🤝 Split & dues", "Who owes you, who you owe, one-tap reminders", com.kharchacheck.app.domain.Dues.toCollect(dues).takeIf { it > 0 }?.let { Money.compact(it) }) { nav.navigate(DuesRoute) }
                 SettingRow("🧾 Bills & due dates", "Card, rent, electricity, insurance reminders", "${bills.size}") { nav.navigate(BillsRoute) }
@@ -165,6 +166,10 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         }
         item {
             KcCard(title = "Reminders") {
+                SwitchRow("💡 Morning money tip", "One short saving or investing tip each morning, with something small to try.", s.morningTip) { on ->
+                    if (on) p.requestNotifications(); vm.setMorningTip(on, s.tipHour, s.tipMinute)
+                }
+                if (s.morningTip) SettingRow("Tip time", null, LocalTime.of(s.tipHour, s.tipMinute).format(fmt)) { dlg = Dlg.TIP_TIME }
                 SwitchRow("Daily nudge", "Only if you haven't logged anything that day. Plus a month-end report.", s.reminder) { on ->
                     if (on) p.requestNotifications(); vm.setReminder(on, s.reminderHour, s.reminderMinute)
                 }
@@ -264,6 +269,12 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
             }) { Text("Allow") } },
             dismissButton = { TextButton(onClick = { dlg = Dlg.NONE }) { Text("Not now") } },
         )
+        Dlg.TIP_TIME -> {
+            val ts = rememberTimePickerState(s.tipHour, s.tipMinute, is24Hour = false)
+            AlertDialog(onDismissRequest = { dlg = Dlg.NONE }, text = { TimePicker(ts) },
+                confirmButton = { TextButton(onClick = { vm.setMorningTip(true, ts.hour, ts.minute); dlg = Dlg.NONE }) { Text("OK") } },
+                dismissButton = { TextButton(onClick = { dlg = Dlg.NONE }) { Text("Cancel") } })
+        }
         Dlg.AUTO_BACKUP -> PasswordDialog(creating = true, onDismiss = { dlg = Dlg.NONE }) { pw ->
             dlg = Dlg.NONE
             p.pickFolder { folder -> vm.enableAutoBackup(folder, pw) }

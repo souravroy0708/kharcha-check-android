@@ -10,6 +10,11 @@ plugins {
 val releaseKeystore: String? = System.getenv("KC_KEYSTORE_PATH")
 val buildNumber: Int = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
 
+// APK size controls (see docs): -PapkAbi=arm64-v8a builds a single-ABI APK; -PcompressNativeLibs compresses
+// native libraries inside downloadable APKs. Play bundles (.aab) use neither: Play optimises those itself.
+val apkAbi: String? = providers.gradleProperty("apkAbi").orNull
+val compressNativeLibs: Boolean = providers.gradleProperty("compressNativeLibs").isPresent
+
 android {
     namespace = "com.kharchacheck.app"
     compileSdk = 36
@@ -22,6 +27,7 @@ android {
         versionCode = 1000 + buildNumber
         versionName = "2.0.$buildNumber"
         buildConfigField("String", "SUPPORT_EMAIL", "\"tosourav6@gmail.com\"")
+        manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
     // Two editions from one codebase:
@@ -54,10 +60,18 @@ android {
 
     buildTypes {
         debug {
+            // Separate package + name, so a test build installs next to the real app instead of conflicting with it.
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            manifestPlaceholders["appLabel"] = "Kharcha Check Test"
         }
         release {
+            // Real Android phones are ARM. x86/x86_64 are only for PC emulators and cost ~28 MB, so they're
+            // left out of release builds (debug/test builds keep them for emulators).
+            ndk {
+                abiFilters.clear()
+                abiFilters += apkAbi?.split(",")?.map { it.trim() } ?: listOf("arm64-v8a", "armeabi-v7a")
+            }
             signingConfig = if (releaseKeystore != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
@@ -74,10 +88,28 @@ android {
         buildConfig = true
     }
     androidResources {
-        noCompress += "traineddata"
+        // PdfBox ships ~3.4 MB of Chinese/Japanese/Korean font maps that Indian statements never use.
+        // Identity-H/V (needed by almost every PDF) are kept. A CJK-font PDF simply falls back to OCR.
+        ignoreAssetsPatterns += listOf(
+            "<file>83pv-*", "<file>90ms*", "<file>90pv*", "<file>Add-*", "<file>Adobe-*", "<file>B5pc-*",
+            "<file>CNS-*", "<file>ETen*", "<file>EUC-*", "<file>Ext-*", "<file>GB*", "<file>HKscs-*",
+            "<file>KSC*", "<file>Uni*", "<file>H", "<file>V",
+        )
     }
     packaging {
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        jniLibs {
+            useLegacyPackaging = compressNativeLibs
+        }
+        resources.excludes += listOf(
+            "/META-INF/{AL2.0,LGPL2.1}",
+            "/META-INF/*.version",
+            "DebugProbesKt.bin",
+            "kotlin-tooling-metadata.json",
+            // Bouncy Castle (pulled in by PdfBox for PDF decryption) bundles ~4 MB of post-quantum
+            // crypto tables and certificate-review message files that are never used.
+            "org/bouncycastle/pqc/**",
+            "org/bouncycastle/x509/*.properties",
+        )
     }
     lint {
         htmlReport = true

@@ -44,6 +44,15 @@ data class Settings(
     /** Persisted tree URI of the folder the user chose for automatic backups. */
     val backupFolder: String = "",
     val lastBackupAt: Long = 0,
+    // Daily money tip + salary plan
+    val morningTip: Boolean = true,
+    val tipHour: Int = 8,
+    val tipMinute: Int = 30,
+    val practicedTipDays: Set<Long> = emptySet(),
+    val planDone: Set<String> = emptySet(),
+    val dependents: Boolean = false,
+    val risk: String = "BALANCED",
+    val emergencySavedPaise: Long = 0,
 )
 
 private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -75,6 +84,14 @@ class SettingsRepository(private val context: Context) {
         val autoBackup = booleanPreferencesKey("auto_backup")
         val backupFolder = stringPreferencesKey("backup_folder")
         val lastBackup = longPreferencesKey("last_backup")
+        val morningTip = booleanPreferencesKey("morning_tip")
+        val tipH = intPreferencesKey("tip_h")
+        val tipM = intPreferencesKey("tip_m")
+        val practiced = stringSetPreferencesKey("practiced_tips")
+        val planDone = stringSetPreferencesKey("plan_done")
+        val dependents = booleanPreferencesKey("dependents")
+        val risk = stringPreferencesKey("risk")
+        val emergencySaved = longPreferencesKey("emergency_saved")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -103,6 +120,14 @@ class SettingsRepository(private val context: Context) {
             autoBackup = p[K.autoBackup] ?: false,
             backupFolder = p[K.backupFolder] ?: "",
             lastBackupAt = p[K.lastBackup] ?: 0,
+            morningTip = p[K.morningTip] ?: true,
+            tipHour = p[K.tipH] ?: 8,
+            tipMinute = p[K.tipM] ?: 30,
+            practicedTipDays = p[K.practiced].orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
+            planDone = p[K.planDone].orEmpty(),
+            dependents = p[K.dependents] ?: false,
+            risk = p[K.risk] ?: "BALANCED",
+            emergencySavedPaise = p[K.emergencySaved] ?: 0,
         )
     }
 
@@ -123,6 +148,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAutoRead(v: Boolean) = context.store.edit { it[K.autoRead] = v }
     suspend fun setAutoBackup(on: Boolean, folder: String?) = context.store.edit { it[K.autoBackup] = on; if (folder != null) it[K.backupFolder] = folder }
     suspend fun setLastBackup(at: Long) = context.store.edit { it[K.lastBackup] = at }
+    suspend fun setMorningTip(on: Boolean, h: Int, m: Int) = context.store.edit { it[K.morningTip] = on; it[K.tipH] = h; it[K.tipM] = m }
+    suspend fun togglePracticed(day: Long) = context.store.edit {
+        val cur = it[K.practiced].orEmpty(); val d = day.toString()
+        it[K.practiced] = if (d in cur) cur - d else cur + d
+    }
+    suspend fun togglePlanStep(id: String) = context.store.edit {
+        val cur = it[K.planDone].orEmpty(); it[K.planDone] = if (id in cur) cur - id else cur + id
+    }
+    suspend fun setPlanProfile(dependents: Boolean, risk: String, emergencySaved: Long) = context.store.edit {
+        it[K.dependents] = dependents; it[K.risk] = risk; it[K.emergencySaved] = emergencySaved
+    }
     suspend fun setSmsCapture(v: Boolean) = context.store.edit { it[K.sms] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
 
@@ -143,6 +179,8 @@ class SettingsRepository(private val context: Context) {
         it[K.name] = s.name; it[K.income] = s.monthlyIncomePaise; it[K.budget] = s.monthlyBudgetPaise; it[K.age] = s.age
         it[K.ret] = s.expectedReturnPct; it[K.small] = s.smallTicketRupees; it[K.noSpend] = s.noSpendDays.map(Long::toString).toSet()
         it[K.won] = s.challengesWon; it[K.celebrated] = s.celebratedBadges
+        it[K.practiced] = s.practicedTipDays.map(Long::toString).toSet(); it[K.planDone] = s.planDone
+        it[K.dependents] = s.dependents; it[K.risk] = s.risk; it[K.emergencySaved] = s.emergencySavedPaise
     }
 
     suspend fun ensureWisdomSeed() = context.store.edit {

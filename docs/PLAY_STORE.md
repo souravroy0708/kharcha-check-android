@@ -90,6 +90,21 @@ Re-check this form whenever you add a library: the CI privacy gate guarantees no
 what makes "No" accurate.
 
 ## 6. Smart edition (optional SMS reading), later
+
+> **Why the smart APK won't install from WhatsApp, browsers or file managers in India:** Google Play Protect's
+> "enhanced fraud protection" automatically blocks *sideloaded* apps that request READ_SMS / RECEIVE_SMS.
+> This is not a bug in the app. The smart edition can only reach users through the Play Store, after the
+> permission declaration below is approved. Play-installed apps are not affected.
+>
+> **Also:** if a copy was installed from the Play internal-testing link, Play re-signed it with Google's app
+> signing key. A GitHub-built APK (signed with your upload key) can't install over it ("App not installed").
+> Uninstall first (back up from Settings), or use the test build below.
+>
+> **Testing SMS reading yourself:** CI also builds `KharchaCheck-2.0.N-smart-TEST.apk`. It is a separate app
+> ("Kharcha Check Test", package `com.kharchacheck.app.debug`) so it installs next to the real one. Install it
+> over USB, which Play Protect's sideloading rule doesn't block:
+> `adb install -r KharchaCheck-2.0.N-smart-TEST.apk`
+
 Only after the standard edition is live:
 1. Upload `KharchaCheck-2.0.N-smart.aab` to **Internal testing**. Play will ask for the **Permissions declaration**.
 2. **Core functionality:** choose **SMS-based money management** ("apps that track and manage budget").

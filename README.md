@@ -21,6 +21,8 @@ leaks in your spending, turn the savings into investments, and make it a daily h
 | **Bills & due dates** | Credit cards, rent, electricity, insurance, EMIs with due day and amount. Reminders N days before, the day before, on the day and when a day late; "Mark paid"; upcoming bills on Home. |
 | **Kharcha Wrapped** | Spotify-Wrapped-style story for any month (Report) or the year so far (Trends): spend vs saved, #1 category, go-to payee, biggest day, leaks, no-spend days, and a money persona (The Saver, The Foodie, The Investor…). Each card shares as an image. |
 | **Quick Settings tile** | "Add expense" from the notification shade. |
+| **📘 Smart Money Guide** | *My salary plan:* needs / wants / save split for your take-home (savings % scales with income), compared with this month's actual; a money ladder in the right order (starter fund → health cover → term cover if someone depends on you → clear costly debt → 6-month fund → SIP → yearly step-up → yearly check-up) using your own EMIs and essentials; monthly SIP split by age and risk comfort; 10/20-year and step-up projections. *Investing:* the golden rules. *Online spend:* 24 app tricks (menu mark-ups, minimum-order traps, fake countdowns, no-cost EMI, BNPL, auto-renewing trials…) led by your own biggest online leak. |
+| **💡 Daily morning tip** | Notification at your chosen time with the day's tip and "Try today"; on cut-a-leak days it adds your biggest online leak this month. "✅ I did it" on Home: +15 XP and a tips streak. |
 | **Grow** | Levels and XP, streaks, 21-day habit grid, 14 badges, 8 challenges (No delivery week, Junk-free 10, Leak-free week...), savings goals, cut-a-leak → SIP calculator, emergency fund target, 18 golden rules. |
 | **Repeating entries** | Tick "Repeat every month" when saving rent, EMI, SIP, salary or a subscription. It's added to Review on its day each month (catching up at most 3 months if the phone was off). Pause or stop any time in Settings. |
 | **Attachments** | Profile photo; receipts and GPay / PhonePe / Paytm screenshots on any entry (or share a screenshot to the app to start an entry); monthly bank, credit card and UPI statements (Report → Statements). All encrypted in the app with a Keystore key; in-app viewer with zoom and PDF pages; "Open in app" for password-protected statements. Not in `.kcbak` backups. |
@@ -40,7 +42,22 @@ leaks in your spending, turn the savings into investments, and make it a daily h
 | Play Store | Publish now, no declaration | Needs the **SMS permission declaration** approved first |
 
 Both use the same `applicationId`, so publish `standard` first, then upload `smart` as an update once Play approves.
+In India, Play Protect blocks *sideloaded* apps that request SMS permissions, so `smart` is distributed only through
+Play; GitHub Releases carry `standard` only. For your own testing, CI builds `smart-TEST.apk` (separate package,
+"Kharcha Check Test"); install it with `adb install` (see `docs/PLAY_STORE.md` §6).
 Captured SMS always lands in the Review inbox first; every field stays editable; message text is never stored.
+
+## App size
+
+| Download | Size | For |
+| --- | --- | --- |
+| `KharchaCheck-…-arm64.apk` | ~12 MB | Almost every phone from the last ~7 years |
+| `KharchaCheck.apk` | ~17 MB | All phones (adds 32-bit ARM) |
+| Play Store (`.aab`) | ~10–15 MB per phone | Play delivers only what each phone needs |
+
+How (all features kept): no x86 emulator libraries in release builds; native libraries compressed in
+downloadable APKs only (`-PcompressNativeLibs`); compressed OCR model; Bouncy Castle's unused post-quantum
+tables and PdfBox's Chinese/Japanese/Korean font maps excluded. Test builds (`smart-TEST`) keep x86 for emulators.
 
 ## Brand assets
 
@@ -84,7 +101,7 @@ app/src/main/java/com/kharchacheck/app/
   export          ReportPdf, BackupManager
 app/src/standard  SmsSupport stub (no permissions)
 app/src/smart     SmsSupport, SmsReceiver, manifest with SMS permissions
-app/src/test      62 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
+app/src/test      68 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
 ```
 
 `./gradlew testStandardDebugUnitTest` runs the tests locally.

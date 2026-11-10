@@ -40,6 +40,7 @@ import com.kharchacheck.app.export.ReportPdf
 import com.kharchacheck.app.sms.SmsSupport
 import com.kharchacheck.app.widget.KharchaWidget
 import com.kharchacheck.app.work.DailyWorker
+import com.kharchacheck.app.work.MorningTipWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,6 +131,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val s = c.settings.current()
             _locked.value = s.appLock
             if (s.onboarded) DailyWorker.schedule(ctx, s.reminderHour, s.reminderMinute)
+            if (s.onboarded && s.morningTip) MorningTipWorker.schedule(ctx, s.tipHour, s.tipMinute)
             val added = repo.generateRecurring()
             if (added > 0) say("$added repeating ${if (added == 1) "entry" else "entries"} added. Check them in Review.")
         }
@@ -152,7 +154,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val map = r.c.associateBy { it.id }
         val today = LocalDate.now()
         val report = ReportEngine.build(YearMonth.from(today), r.t, map, reportConfig(r.s, r.b))
-        val game = Gamification.build(r.t, map, r.g, r.s.noSpendDays, r.s.challengesWon, r.s.monthlyBudgetPaise, today)
+        val game = Gamification.build(r.t, map, r.g, r.s.noSpendDays, r.s.challengesWon, r.s.monthlyBudgetPaise, today,
+            practicedDays = r.s.practicedTipDays, planStepsDone = r.s.planDone.size)
         val ch = Gamification.challenge(r.s.activeChallenge)?.let {
             Gamification.progress(it, LocalDate.ofEpochDay(r.s.challengeStartDay), r.t, map, r.s.noSpendDays, today)
         }
@@ -358,6 +361,24 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun pendingCrash(): String? = CrashReporter.pending(ctx)
     fun clearCrash() = CrashReporter.clear(ctx)
 
+    // ---- Daily tip, salary plan ----
+    fun markTipPracticed() = viewModelScope.launch {
+        val today = LocalDate.now().toEpochDay()
+        val was = today in c.settings.current().practicedTipDays
+        c.settings.togglePracticed(today)
+        if (!was) say("Nice! Tip practised ✅ +15 XP")
+    }
+    fun togglePlanStep(id: String) = viewModelScope.launch {
+        val was = id in c.settings.current().planDone
+        c.settings.togglePlanStep(id)
+        if (!was) say("Step done 🪜 +40 XP")
+    }
+    fun setPlanProfile(dependents: Boolean, risk: String, emergencySaved: Long) = viewModelScope.launch { c.settings.setPlanProfile(dependents, risk, emergencySaved) }
+    fun setMorningTip(on: Boolean, h: Int, m: Int) = viewModelScope.launch {
+        c.settings.setMorningTip(on, h, m)
+        if (on) MorningTipWorker.schedule(ctx, h, m) else MorningTipWorker.cancel(ctx)
+    }
+
     // ---- Dues & bills ----
     fun saveDue(d: Due) = viewModelScope.launch { c.tools.saveDue(d) }
     fun settleDue(d: Due) = viewModelScope.launch { c.tools.settle(d); say("Settled with ${d.person} ✓") }
@@ -377,6 +398,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishOnboarding(name: String, income: Long, budget: Long) = viewModelScope.launch {
         c.settings.completeOnboarding(name, income, budget)
         val s = c.settings.current(); DailyWorker.schedule(ctx, s.reminderHour, s.reminderMinute)
+        if (s.morningTip) MorningTipWorker.schedule(ctx, s.tipHour, s.tipMinute)
     }
     fun setName(v: String) = viewModelScope.launch { c.settings.setName(v) }
     fun setIncome(v: Long) = viewModelScope.launch { c.settings.setIncome(v) }

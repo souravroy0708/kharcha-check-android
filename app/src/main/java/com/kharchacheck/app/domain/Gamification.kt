@@ -89,6 +89,8 @@ object Gamification {
         Badge("goal_done", "🏁", "Goal Getter", "Complete a savings goal"),
         Badge("logger_100", "💯", "Century", "Log 100 entries"),
         Badge("challenge_won", "🏆", "Challenger", "Win a challenge"),
+        Badge("habit_builder", "🧠", "Habit Builder", "Practise 7 daily money tips"),
+        Badge("plan_progress", "🪜", "On the Ladder", "Complete 3 steps of your salary plan"),
     )
 
     val challenges = listOf(
@@ -112,6 +114,10 @@ object Gamification {
         challengesWon: Int,
         budgetPaise: Long,
         today: LocalDate = LocalDate.now(),
+        /** Days the user tapped "I did it" on the daily tip. */
+        practicedDays: Set<Long> = emptySet(),
+        /** Salary-plan steps the user marked done. */
+        planStepsDone: Int = 0,
     ): GameState {
         fun bucket(t: Txn) = categories[t.categoryId]?.bucket ?: Bucket.WANT
         val byDate = txns.groupBy { it.date }
@@ -145,8 +151,11 @@ object Gamification {
         }
         xp += noSpendDays.size * 20
         xp += challengesWon * 100
+        xp += practicedDays.size * 15
+        xp += planStepsDone * 40
 
-        val earned = earnedBadges(txns, categories, goals, noSpendDays, challengesWon, budgetPaise, today, bestLog, bestLeakFree)
+        val earned = earnedBadges(txns, categories, goals, noSpendDays, challengesWon, budgetPaise, today, bestLog, bestLeakFree) +
+            listOfNotNull("habit_builder".takeIf { practicedDays.size >= 7 }, "plan_progress".takeIf { planStepsDone >= 3 })
         xp += earned.size * 50
 
         val level = levels.last { xp >= it.minXp }

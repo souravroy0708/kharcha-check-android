@@ -63,6 +63,7 @@ import com.kharchacheck.app.feature.ImportScreen
 import com.kharchacheck.app.feature.BillsScreen
 import com.kharchacheck.app.feature.DuesScreen
 import com.kharchacheck.app.feature.WealthScreen
+import com.kharchacheck.app.feature.GuideScreen
 import com.kharchacheck.app.feature.WrappedScreen
 import com.kharchacheck.app.feature.CategoryInsightsScreen
 import com.kharchacheck.app.feature.ReportScreen
@@ -82,6 +83,7 @@ import com.kharchacheck.app.ui.nav.ImportRoute
 import com.kharchacheck.app.ui.nav.BillsRoute
 import com.kharchacheck.app.ui.nav.DuesRoute
 import com.kharchacheck.app.ui.nav.WealthRoute
+import com.kharchacheck.app.ui.nav.GuideRoute
 import com.kharchacheck.app.ui.nav.WrappedRoute
 import com.kharchacheck.app.ui.nav.CategoryInsightsRoute
 import com.kharchacheck.app.ui.nav.ReportRoute
@@ -209,6 +211,7 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
                 composable<WealthRoute> { WealthScreen(vm, nav) }
+                composable<GuideRoute> { e -> GuideScreen(vm, nav, e.toRoute<GuideRoute>()) }
                 composable<BillsRoute> { BillsScreen(vm, nav) }
                 composable<WrappedRoute> { e -> WrappedScreen(vm, nav, e.toRoute<WrappedRoute>()) }
                 composable<CategoryInsightsRoute> { e -> CategoryInsightsScreen(vm, nav, e.toRoute<CategoryInsightsRoute>()) }

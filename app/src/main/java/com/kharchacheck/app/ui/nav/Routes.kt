@@ -23,3 +23,4 @@ import kotlinx.serialization.Serializable
 /** period = "2026-10" for a month, "2026" for a year. */
 @Serializable data class WrappedRoute(val period: String)
 @Serializable object WealthRoute
+@Serializable data class GuideRoute(val tab: Int = 0)

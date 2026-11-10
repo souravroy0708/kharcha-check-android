@@ -107,6 +107,22 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
 
+        item {
+            Pad {
+                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.GuideRoute()) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📘", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Smart Money Guide", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                            Text("Your salary plan, investing best practices, and how apps get you to overspend online.",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
+
         item { Pad { KcCard(title = "Your 21 days") { HabitGrid(g.last21) } } }
 
         item { Pad { ChallengeCard(data, vm) } }
@@ -306,7 +322,7 @@ private fun EmergencyHint(d: AppData) {
 }
 
 @Composable
-private fun RulesList(d: AppData) {
+internal fun RulesList(d: AppData) {
     var topic by rememberSaveable { mutableStateOf<String?>(null) }
     Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

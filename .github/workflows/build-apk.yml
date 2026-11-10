@@ -46,7 +46,7 @@ jobs:
           KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
-        run: ./gradlew assembleStandardRelease assembleSmartRelease --console=plain
+        run: ./gradlew assembleStandardRelease assembleSmartRelease assembleSmartDebug -PcompressNativeLibs --console=plain
 
       # Google Play needs an .aab. Only built with your real key: Play rejects debug-signed bundles.
       - name: Build signed Play bundles (.aab)
@@ -88,11 +88,25 @@ jobs:
           cp app/build/outputs/apk/standard/release/*.apk "out/KharchaCheck-$V-standard.apk"
           cp app/build/outputs/apk/smart/release/*.apk "out/KharchaCheck-$V-smart.apk"
           cp "out/KharchaCheck-$V-standard.apk" out/KharchaCheck.apk
+          # Developer test build of the SMS edition: separate package ("Kharcha Check Test"), installs next to the real app.
+          # Install it with: adb install -r KharchaCheck-<ver>-smart-TEST.apk  (Play Protect blocks SMS apps sideloaded from WhatsApp/browsers in India)
+          cp app/build/outputs/apk/smart/debug/*.apk "out/KharchaCheck-$V-smart-TEST.apk"
           if [ -n "${KC_KEYSTORE_PATH:-}" ]; then
             cp app/build/outputs/bundle/standardRelease/*.aab "out/KharchaCheck-$V-standard.aab"
             cp app/build/outputs/bundle/smartRelease/*.aab "out/KharchaCheck-$V-smart.aab"
           fi
           ls -la out
+
+      # Smaller download for almost every phone in use today (64-bit ARM). Separate build because it changes the ABI list.
+      - name: Build arm64-only APK
+        env:
+          KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
+          KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
+          KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleStandardRelease -PcompressNativeLibs -PapkAbi=arm64-v8a --console=plain
+          cp app/build/outputs/apk/standard/release/*.apk "out/KharchaCheck-2.0.${{ github.run_number }}-arm64.apk"
+          echo "APK sizes:"; ls -la out/*.apk
 
       - name: Upload Play bundles (.aab)
         if: env.KC_KEYSTORE_PATH != ''
@@ -126,13 +140,13 @@ jobs:
           make_latest: true
           files: |
             out/KharchaCheck.apk
-            out/KharchaCheck-2.0.${{ github.run_number }}-standard.apk
-            out/KharchaCheck-2.0.${{ github.run_number }}-smart.apk
+            out/KharchaCheck-2.0.${{ github.run_number }}-arm64.apk
           body: |
             **Kharcha Check: Paisa kahan gaya? Ab pata chalega.**
             Private expense tracker. No internet permission, no account, encrypted on your phone.
-            **Install:** download `KharchaCheck.apk` on your Android phone and open it.
-            `-smart.apk` adds optional bank-SMS reading (off until you turn it on).
+            **Install:** download `KharchaCheck-…-arm64.apk` (smallest, fits almost every phone from the last ~7 years).
+            If it says "App not installed" on an older phone, use `KharchaCheck.apk` (works on all phones).
+            Automatic bank-SMS reading arrives through the Play Store once Google approves it.
 
       - name: Upload Room schema (commit it so future migrations can be tested)
         uses: actions/upload-artifact@v4

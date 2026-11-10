@@ -22,6 +22,10 @@ interface OcrEngine {
  * into private storage. No network, no Google services, no telemetry.
  */
 class TesseractOcr(private val context: Context) : OcrEngine {
+    private companion object {
+        /** Bump when assets/tessdata/eng.traineddata is replaced. */
+        const val MODEL_VERSION = "tessdata_fast-eng-4.1.0"
+    }
     private val lock = Mutex()
     @Volatile private var api: TessBaseAPI? = null
 
@@ -30,11 +34,13 @@ class TesseractOcr(private val context: Context) : OcrEngine {
         val base = File(context.noBackupFilesDir, "tesseract")
         val dir = File(base, "tessdata").apply { mkdirs() }
         val model = File(dir, "eng.traineddata")
-        val expected = runCatching { context.assets.openFd("tessdata/eng.traineddata").use { it.length } }.getOrDefault(-1L)
-        if (!model.exists() || (expected > 0 && model.length() != expected)) {
+        // The model ships compressed inside the APK (saves ~2 MB), so it is copied out once per model version.
+        val marker = File(dir, "eng.version")
+        if (!model.exists() || !marker.exists() || marker.readText() != MODEL_VERSION) {
             val tmp = File(dir, "eng.traineddata.tmp")
             context.assets.open("tessdata/eng.traineddata").use { input -> tmp.outputStream().use { input.copyTo(it) } }
             model.delete(); tmp.renameTo(model)
+            marker.writeText(MODEL_VERSION)
         }
         val t = TessBaseAPI()
         if (!t.init(base.absolutePath, "eng", TessBaseAPI.OEM_LSTM_ONLY)) { t.recycle(); error("The reading engine couldn't start") }

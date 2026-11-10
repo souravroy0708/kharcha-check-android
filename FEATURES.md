@@ -33,3 +33,5 @@
 | Wealth & net worth with daily AMFI NAVs | `domain/Wealth.kt`, `data/repo/WealthRepository.kt`, `feature/WealthScreen.kt`, `work/BackgroundWork.kt` (`NavRefreshWorker`) |
 | Automatic encrypted backup to a chosen folder (Drive) | `work/BackgroundWork.kt` (`AutoBackupWorker`), `data/security/SecretBox.kt`, `domain/Wealth.kt` (`BackupRotation`) |
 | User-controlled crash reports | `work/CrashReporter.kt`, `ui/Root.kt` |
+| Smart Money Guide: salary plan, money ladder, SIP split, online-spending traps | `domain/SalaryPlanner.kt`, `domain/OnlineSpending.kt`, `feature/GuideScreen.kt` |
+| Daily morning tip notification + "I did it" XP loop, new badges | `work/MorningTipWorker.kt`, `feature/HomeScreen.kt`, `domain/Gamification.kt` |

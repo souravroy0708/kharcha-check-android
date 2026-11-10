@@ -77,6 +77,8 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                 JSONObject().put("name", s.name).put("income", s.monthlyIncomePaise).put("budget", s.monthlyBudgetPaise).put("age", s.age)
                     .put("ret", s.expectedReturnPct).put("small", s.smallTicketRupees).put("won", s.challengesWon)
                     .put("nospend", JSONArray(s.noSpendDays.toList())).put("celebrated", JSONArray(s.celebratedBadges.toList()))
+                    .put("practiced", JSONArray(s.practicedTipDays.toList())).put("planDone", JSONArray(s.planDone.toList()))
+                    .put("dependents", s.dependents).put("risk", s.risk).put("emergencySaved", s.emergencySavedPaise)
             })
         val blob = BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
         password.fill('\u0000')
@@ -130,6 +132,8 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                 name = s.optString("name", cur.name), monthlyIncomePaise = s.optLong("income"), monthlyBudgetPaise = s.optLong("budget"),
                 age = s.optInt("age"), expectedReturnPct = s.optInt("ret", 12), smallTicketRupees = s.optInt("small", 200),
                 challengesWon = s.optInt("won"), noSpendDays = longs(s.optJSONArray("nospend")), celebratedBadges = strs(s.optJSONArray("celebrated")),
+                practicedTipDays = longs(s.optJSONArray("practiced")), planDone = strs(s.optJSONArray("planDone")),
+                dependents = s.optBoolean("dependents"), risk = s.optString("risk", "BALANCED"), emergencySavedPaise = s.optLong("emergencySaved"),
             ))
         }
         txns.size

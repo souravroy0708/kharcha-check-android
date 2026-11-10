@@ -63,6 +63,7 @@ import com.kharchacheck.app.ui.nav.ActivityRoute
 import com.kharchacheck.app.ui.nav.BillsRoute
 import com.kharchacheck.app.ui.nav.DuesRoute
 import com.kharchacheck.app.ui.nav.EditRoute
+import com.kharchacheck.app.ui.nav.GuideRoute
 import com.kharchacheck.app.ui.nav.GrowRoute
 import com.kharchacheck.app.ui.nav.InboxRoute
 import com.kharchacheck.app.ui.nav.SettingsRoute
@@ -99,7 +100,9 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
         if (data.settings.wisdomSeed != 0L) item {
             val today = LocalDate.now()
             val card = remember(today, data.settings.wisdomSeed) { DailyWisdom.forDate(today, data.settings.wisdomSeed) }
-            Box(Modifier.padding(horizontal = 16.dp)) { WisdomCard(card, onShare = { platform.shareText("${card.emoji} ${card.line}\n\nTry today: ${card.doToday}\n\n— via Kharcha Check") }) }
+            val practisedToday = today.toEpochDay() in data.settings.practicedTipDays
+            val tipStreak = com.kharchacheck.app.domain.Gamification.currentStreak(today) { it.toEpochDay() in data.settings.practicedTipDays }
+            Box(Modifier.padding(horizontal = 16.dp)) { WisdomCard(card, practisedToday, tipStreak, onDone = vm::markTipPracticed, onShare = { platform.shareText("${card.emoji} ${card.line}\n\nTry today: ${card.doToday}\n\n— via Kharcha Check") }) }
         }
 
         if (data.inbox.isNotEmpty()) item {
@@ -136,6 +139,31 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                     item { QuickChip("📄", "Statement") { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) } }
                     items(quick, key = { it.id }) { c -> QuickChip(c.emoji, c.name.substringBefore(" (").substringBefore(" &")) { nav.navigate(EditRoute(type = c.bucket.type.name, categoryId = c.id)) } }
+                }
+            }
+        }
+
+        item {
+            val plan = remember(data) { com.kharchacheck.app.feature.salaryPlanFor(data) }
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                KcCard(onClick = { nav.navigate(GuideRoute()) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📘", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            if (plan == null) {
+                                Text("Your salary plan", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                                Text("Add your salary: get your needs/wants/savings split, the right order of money steps and a SIP plan.",
+                                    style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                            } else {
+                                val next = plan.steps.firstOrNull { !it.done }
+                                Text("Save ${Money.compact(plan.savePaise)}/month · ${plan.steps.count { it.done }}/${plan.steps.size} steps",
+                                    style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                                Text(next?.let { "Next: ${it.emoji} ${it.title}" } ?: "All steps done. Review once a year 🎉",
+                                    style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                            }
+                        }
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
                 }
             }
         }
@@ -352,7 +380,7 @@ private fun LeakCard(d: AppData, onGrow: () -> Unit) {
 }
 
 @Composable
-private fun WisdomCard(w: Wisdom, onShare: () -> Unit) {
+private fun WisdomCard(w: Wisdom, done: Boolean, streak: Int, onDone: () -> Unit, onShare: () -> Unit) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp))
             .background(Haldi.copy(alpha = if (Kc.colors.dark) 0.16f else 0.22f))
@@ -378,9 +406,12 @@ private fun WisdomCard(w: Wisdom, onShare: () -> Unit) {
                 Text(w.doToday, style = MaterialTheme.typography.bodyMedium, color = Kc.colors.text)
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("A new one tomorrow. Education, not advice.", style = MaterialTheme.typography.labelSmall, color = Kc.colors.muted, modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (done) Pill("✅ Done today" + if (streak > 1) " · 🔥 $streak days" else "", Kc.colors.goodBg, Kc.colors.good, onClick = onDone)
+            else Pill("✅ I did it · +15 XP", Haldi, Ink, onClick = onDone)
+            Spacer(Modifier.weight(1f))
             Pill("Share", Ink, Color.White, onClick = onShare)
         }
+        Text("A new one tomorrow. Education, not advice.", style = MaterialTheme.typography.labelSmall, color = Kc.colors.muted)
     }
 }

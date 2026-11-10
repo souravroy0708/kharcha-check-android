@@ -17,12 +17,16 @@ import com.kharchacheck.app.R
 object Notifier {
     const val CH_REMINDERS = "reminders"
     const val CH_CAPTURE = "captured"
+    const val CH_TIPS = "tips"
     const val EXTRA_OPEN = "open"
 
     fun createChannels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java) ?: return
         nm.createNotificationChannel(NotificationChannel(CH_REMINDERS, "Reminders & monthly report", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "Daily logging nudge, streak saver and month-end report"
+        })
+        nm.createNotificationChannel(NotificationChannel(CH_TIPS, "Daily money tip", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "One short saving or investing tip each morning, with something small to try"
         })
         nm.createNotificationChannel(NotificationChannel(CH_CAPTURE, "Captured from bank SMS", NotificationManager.IMPORTANCE_LOW).apply {
             description = "New entries read from bank alerts, waiting for your review"
