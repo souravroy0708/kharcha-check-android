@@ -212,3 +212,63 @@ class IncomeFallbackTest {
         assertEquals(0L, r.incomePaise)
     }
 }
+
+class StreamCryptoTest {
+    private val pw = "correct horse".toCharArray()
+    private fun encrypt(data: ByteArray): ByteArray {
+        val bos = java.io.ByteArrayOutputStream()
+        com.kharchacheck.app.domain.StreamCrypto.encrypting(bos, pw.copyOf(), iterations = 100_000).use { it.write(data) }
+        return bos.toByteArray()
+    }
+    private fun decrypt(blob: ByteArray, p: CharArray = pw.copyOf()) =
+        com.kharchacheck.app.domain.StreamCrypto.decrypting(java.io.ByteArrayInputStream(blob), p).readBytes()
+
+    @Test fun roundTripAcrossManyChunksAndEmpty() {
+        val big = ByteArray(3 * (1 shl 20) + 12_345) { (it * 31 + 7).toByte() }
+        assertTrue(decrypt(encrypt(big)).contentEquals(big))
+        assertTrue(decrypt(encrypt(ByteArray(0))).isEmpty())
+        assertTrue(decrypt(encrypt(ByteArray(1 shl 20))).size == 1 shl 20)   // exactly one full chunk
+    }
+
+    @Test fun wrongPasswordTruncationAndTamperingAreDetected() {
+        val blob = encrypt(ByteArray(2 * (1 shl 20) + 10) { it.toByte() })
+        var wrong = false
+        try { decrypt(blob, "nope".toCharArray()) } catch (e: BackupCrypto.WrongPasswordException) { wrong = true }
+        assertTrue(wrong)
+
+        // Cut off the final chunk: must not "succeed" with partial data
+        val lastLen = (1 shl 20) + 16
+        var truncated = false
+        try { decrypt(blob.copyOfRange(0, blob.size - (10 + 16 + 4))) } catch (e: com.kharchacheck.app.domain.StreamCrypto.TruncatedException) { truncated = true }
+        assertTrue(truncated)
+
+        // Flip one byte in the middle
+        val bad = blob.copyOf(); bad[40 + lastLen / 2] = (bad[40 + lastLen / 2].toInt() xor 1).toByte()
+        var tampered = false
+        try { decrypt(bad) } catch (e: Exception) { tampered = true }
+        assertTrue(tampered)
+    }
+}
+
+class BackupFormatTest {
+    /** Mirrors BackupManager: files first, data.json last, all through StreamCrypto. */
+    @Test fun zipInsideStreamCryptoRoundTripsLargeFiles() {
+        val pdf = ByteArray(5 * (1 shl 20) + 333) { (it % 251).toByte() }      // a 5 MB "statement"
+        val receipt = ByteArray(80_000) { (it % 7).toByte() }
+        val bos = java.io.ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(com.kharchacheck.app.domain.StreamCrypto.encrypting(bos, "pw-12345".toCharArray(), 100_000)).use { z ->
+            z.putNextEntry(java.util.zip.ZipEntry("files/a1.bin")); z.write(pdf); z.closeEntry()
+            z.putNextEntry(java.util.zip.ZipEntry("files/b2.bin")); z.write(receipt); z.closeEntry()
+            z.putNextEntry(java.util.zip.ZipEntry("data.json")); z.write("""{"format":"kharcha-check-backup","includesFiles":true}""".toByteArray()); z.closeEntry()
+        }
+        val blob = bos.toByteArray()
+        assertTrue(com.kharchacheck.app.domain.StreamCrypto.isKcb3(blob.copyOfRange(0, 4)))
+        val got = HashMap<String, ByteArray>()
+        java.util.zip.ZipInputStream(com.kharchacheck.app.domain.StreamCrypto.decrypting(java.io.ByteArrayInputStream(blob), "pw-12345".toCharArray())).use { z ->
+            while (true) { val e = z.nextEntry ?: break; got[e.name] = z.readBytes() }
+        }
+        assertTrue(got.getValue("files/a1.bin").contentEquals(pdf))
+        assertTrue(got.getValue("files/b2.bin").contentEquals(receipt))
+        assertTrue(String(got.getValue("data.json")).contains("includesFiles"))
+    }
+}

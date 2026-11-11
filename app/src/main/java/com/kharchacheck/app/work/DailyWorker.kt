@@ -47,6 +47,30 @@ class DailyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
         }
         val g = Gamification.build(txns, cats, emptyList(), s.noSpendDays, s.challengesWon, s.monthlyBudgetPaise, today)
         KharchaWidget.push(applicationContext, KharchaWidget.State(true, g.logStreak, g.loggedToday, s.wisdomSeed))
+        // Budget alerts (catches crossings from statement imports too). Each threshold once per month.
+        run {
+            val month = YearMonth.from(today)
+            val report = com.kharchacheck.app.domain.ReportEngine.build(month, txns, cats)
+            val budgets = c.finance.budgets.first()
+            val sent = mutableSetOf<String>()
+            val lines = mutableListOf<String>()
+            report.categories.forEach { line ->
+                val limit = budgets[line.category.id] ?: return@forEach
+                val lvl = com.kharchacheck.app.domain.BudgetAlerts.level(line.paise, limit) ?: return@forEach
+                val key = "$month|${line.category.id}|$lvl"
+                if (key !in s.budgetAlertsSent) { sent += key; lines += com.kharchacheck.app.domain.BudgetAlerts.message("${line.category.emoji} ${line.category.name}", line.paise, limit, lvl) }
+            }
+            com.kharchacheck.app.domain.BudgetAlerts.level(report.spendPaise, s.monthlyBudgetPaise)?.let { lvl ->
+                val key = "$month|all|$lvl"
+                if (key !in s.budgetAlertsSent) { sent += key; lines += com.kharchacheck.app.domain.BudgetAlerts.message("monthly", report.spendPaise, s.monthlyBudgetPaise, lvl) }
+            }
+            if (lines.isNotEmpty()) {
+                Notifier.post(applicationContext, 2400, Notifier.CH_REMINDERS, if (lines.size == 1) "Budget check" else "${lines.size} budgets need attention",
+                    lines.joinToString("\n"), "report", publicTitle = "Budget check")
+                c.settings.markBudgetAlerts(sent, month.toString())
+            }
+        }
+
         // Bill reminders: N days before, the day before, on the day, and once when a day late.
         com.kharchacheck.app.domain.Bills.remindToday(c.tools.bills(), today).forEachIndexed { i, b ->
             val amount = if (b.bill.amountPaise > 0) " (${Money.format(b.bill.amountPaise)})" else ""

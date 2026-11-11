@@ -27,7 +27,6 @@ data class Settings(
     val appLock: Boolean = false,
     val secureScreen: Boolean = true,
     val theme: ThemeMode = ThemeMode.SYSTEM,
-    val smsCapture: Boolean = false,
     val reminder: Boolean = true,
     val reminderHour: Int = 21,
     val reminderMinute: Int = 0,
@@ -59,6 +58,10 @@ data class Settings(
     val hiddenIds: Set<Long> = emptySet(),
     /** Mask the big amounts on Home (for showing the app to someone). */
     val maskAmounts: Boolean = false,
+    /** "yyyy-MM|categoryId|level" budget warnings already sent, so each one is sent once a month. */
+    val budgetAlertsSent: Set<String> = emptySet(),
+    /** Put statements, receipts and the profile photo inside backups (bigger files, nothing lost on a new phone). */
+    val backupIncludeFiles: Boolean = true,
 )
 
 private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -101,6 +104,8 @@ class SettingsRepository(private val context: Context) {
         val importedFiles = stringSetPreferencesKey("imported_files")
         val hidden = stringSetPreferencesKey("hidden_ids")
         val mask = booleanPreferencesKey("mask_amounts")
+        val budgetAlerts = stringSetPreferencesKey("budget_alerts")
+        val backupFiles = booleanPreferencesKey("backup_files")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -115,7 +120,6 @@ class SettingsRepository(private val context: Context) {
             appLock = p[K.lock] ?: false,
             secureScreen = p[K.secure] ?: true,
             theme = runCatching { ThemeMode.valueOf(p[K.theme] ?: "SYSTEM") }.getOrDefault(ThemeMode.SYSTEM),
-            smsCapture = p[K.sms] ?: false,
             reminder = p[K.reminder] ?: true,
             reminderHour = p[K.rh] ?: 21,
             reminderMinute = p[K.rm] ?: 0,
@@ -140,6 +144,8 @@ class SettingsRepository(private val context: Context) {
             importedFiles = p[K.importedFiles].orEmpty(),
             hiddenIds = p[K.hidden].orEmpty().mapNotNull { it.toLongOrNull() }.toSet(),
             maskAmounts = p[K.mask] ?: false,
+            budgetAlertsSent = p[K.budgetAlerts].orEmpty(),
+            backupIncludeFiles = p[K.backupFiles] ?: true,
         )
     }
 
@@ -179,8 +185,12 @@ class SettingsRepository(private val context: Context) {
         val cur = it[K.hidden].orEmpty(); val add = ids.map(Long::toString)
         it[K.hidden] = if (hidden) cur + add else cur - add.toSet()
     }
+    /** Remembers sent budget alerts; keeps only the current month's so the set never grows. */
+    suspend fun markBudgetAlerts(keys: Set<String>, month: String) = context.store.edit {
+        it[K.budgetAlerts] = (it[K.budgetAlerts].orEmpty() + keys).filter { k -> k.startsWith("$month|") }.toSet()
+    }
+    suspend fun setBackupIncludeFiles(v: Boolean) = context.store.edit { it[K.backupFiles] = v }
     suspend fun setMaskAmounts(v: Boolean) = context.store.edit { it[K.mask] = v }
-    suspend fun setSmsCapture(v: Boolean) = context.store.edit { it[K.sms] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
 
     suspend fun toggleNoSpend(epochDay: Long) = context.store.edit {

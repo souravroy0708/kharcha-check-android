@@ -15,12 +15,22 @@ import java.time.YearMonth
  * Builds synthetic PDF pages the way PdfBox reports them: one glyph per character with x/width/y.
  * Cells are placed left-aligned (start x) or right-aligned (end x), like real statements.
  */
-class Page(private val page: Int = 0) {
+class Page(private val page: Int = 0, private val zeroWidths: Boolean = false) {
     val glyphs = mutableListOf<Glyph>()
     private var y = 50f
     private val cw = 5f
+    private var wordNo = page * 100_000
 
-    fun left(text: String, x: Float, yy: Float = y) { text.forEachIndexed { i, c -> glyphs += Glyph(c.toString(), x + i * cw, cw, yy, 10f, page) } }
+    /** Like PdfBox: each space-separated token is one word (own word id); widths may be reported as 0. */
+    fun left(text: String, x: Float, yy: Float = y) {
+        var id = ++wordNo
+        text.forEachIndexed { i, c ->
+            if (c == ' ') { id = ++wordNo; return@forEachIndexed }
+            glyphs += Glyph(c.toString(), x + i * cw, if (zeroWidths) 0f else cw, yy, 10f, page, id)
+        }
+    }
+    /** A separate PDF word written right after the previous one (e.g. ".56" after "1,234"). */
+    fun fragment(text: String, x: Float, yy: Float = y) = left(text, x, yy)
     fun right(text: String, xEnd: Float, yy: Float = y) = left(text, xEnd - text.length * cw, yy)
     fun row(block: Page.() -> Unit) { block(); y += 14f }
 }
@@ -74,6 +84,7 @@ class PdfTableTest {
         val rows = PdfTable.parse(pages.flatMap { it.glyphs }, nov)!!.rows
         assertEquals(4, rows.size)
         assertEquals(listOf(true, false, false, true), rows.map { it.credit })
+        // Oldest row can't be balance-checked, but its amount came cleanly from the Credit column.
         assertEquals(listOf(50000L, 120000L, 19900L, 9900L), rows.map { it.amountPaise })
         assertEquals(LocalDate.of(2026, 11, 8), rows[0].date)
         assertTrue(rows.take(3).all { it.sure })
@@ -94,5 +105,83 @@ class PdfTableTest {
     @Test fun noHeaderMeansFallBack() {
         val p = Page(); p.row { left("Hello world 123.45", 20f) }
         assertNull(PdfTable.parse(p.glyphs, nov))
+    }
+}
+
+
+class PdfAccuracyTest {
+    private val nov = YearMonth.of(2026, 11)
+
+    /** HDFC-style header where each money heading wraps onto two lines and "Date" sits between them. */
+    private fun twoLineHeader(p: Page) {
+        p.row { right("Withdrawal", 520f); right("Deposit", 610f); right("Closing", 710f) }
+        p.row { left("Date", 20f); left("Narration", 80f); left("Value Dt", 370f); right("Amt.", 520f); right("Amt.", 610f); right("Balance", 710f) }
+    }
+
+    @Test fun twoLineHeaderAndZeroWidthFonts() {
+        val p = Page(zeroWidths = true)
+        twoLineHeader(p)
+        p.row { left("Opening Balance", 80f); right("10,000.00", 710f) }
+        p.row { left("01/11/26", 20f); left("UPI-ZOMATO-PAYMENT", 80f); left("01/11/26", 370f); right("250.00", 520f); right("9,750.00", 710f) }
+        p.row { left("02/11/26", 20f); left("NEFT CR SALARY", 80f); left("02/11/26", 370f); right("40,000.00", 610f); right("49,750.00", 710f) }
+        p.row { left("03/11/26", 20f); left("UPI-BLINKIT", 80f); left("03/11/26", 370f); right("1,234.56", 520f); right("48,515.44", 710f) }
+        val rows = PdfTable.parse(p.glyphs, nov)!!.rows
+        assertEquals(listOf(25000L, 4000000L, 123456L), rows.map { it.amountPaise })
+        assertEquals(listOf(false, true, false), rows.map { it.credit })
+        assertTrue(rows.all { it.sure })
+    }
+
+    @Test fun decimalWrittenAsSeparateWord() {
+        val p = Page()
+        twoLineHeader(p)
+        p.row { left("Opening Balance", 80f); right("5,000.00", 710f) }
+        // "1,234" and ".56" arrive as two PDF words in the withdrawal column
+        p.row { left("04/11/26", 20f); left("CARD POS AMAZON", 80f); left("04/11/26", 370f); left("1,234", 485f); fragment(".56", 510f); right("3,765.44", 710f) }
+        p.row { left("05/11/26", 20f); left("UPI-CHAI", 80f); left("05/11/26", 370f); right("40.00", 520f); right("3,725.44", 710f) }
+        p.row { left("06/11/26", 20f); left("UPI-AUTO", 80f); left("06/11/26", 370f); right("60.00", 520f); right("3,665.44", 710f) }
+        val rows = PdfTable.parse(p.glyphs, nov)!!.rows
+        assertEquals(123456L, rows[0].amountPaise)
+        assertTrue(rows[0].sure)
+    }
+
+    @Test fun missingAmountIsTakenFromTheBalanceChange() {
+        val p = Page()
+        twoLineHeader(p)
+        p.row { left("Opening Balance", 80f); right("20,000.00", 710f) }
+        p.row { left("01/11/26", 20f); left("UPI-SWIGGY", 80f); left("01/11/26", 370f); right("300.00", 520f); right("19,700.00", 710f) }
+        p.row { left("02/11/26", 20f); left("UPI-RENT", 80f); left("02/11/26", 370f); right("19,700.00", 710f) /* amount cell lost */ }
+        p.row { left("03/11/26", 20f); left("UPI-METRO", 80f); left("03/11/26", 370f); right("50.00", 520f); right("19,650.00", 710f) }
+        p.row { left("04/11/26", 20f); left("NEFT CR REFUND", 80f); left("04/11/26", 370f); right("350.00", 610f); right("20,000.00", 710f) }
+        p.row { left("05/11/26", 20f); left("UPI-CAB", 80f); left("05/11/26", 370f); right("200.00", 520f); right("19,800.00", 710f) }
+        val rows = PdfTable.parse(p.glyphs, nov)!!.rows
+        // The rent row's balance didn't change → no movement → amount 0 (not the balance!)
+        assertEquals(listOf(30000L, 0L, 5000L, 35000L, 20000L), rows.map { it.amountPaise })
+        assertFalse(rows[1].sure)
+    }
+
+    @Test fun balanceNeverBecomesTheAmount() {
+        // Columns shifted: every "amount" is really the balance. The chain can't verify anything → all 0, not wrong.
+        val p = Page()
+        twoLineHeader(p)
+        p.row { left("01/11/26", 20f); left("UPI-A", 80f); left("01/11/26", 370f); right("9,750.00", 520f) }
+        p.row { left("02/11/26", 20f); left("UPI-B", 80f); left("02/11/26", 370f); right("9,500.00", 520f) }
+        p.row { left("03/11/26", 20f); left("UPI-C", 80f); left("03/11/26", 370f); right("9,100.00", 520f) }
+        val rows = PdfTable.parse(p.glyphs, nov)!!.rows
+        // No balance column at all here, so values from the Withdrawal column are kept but flagged unsure
+        assertTrue(rows.none { it.sure && it.amountPaise > 0 && it.credit })
+        assertTrue(rows.all { !it.sure })
+    }
+
+    @Test fun textFallbackNeverUsesALoneNumber() {
+        val lines = listOf(
+            "Opening Balance 1,000.00",
+            "01/11/26 UPI-ZOMATO 250.00 750.00",
+            "02/11/26 UPI-RENT 650.00",            // only the balance survived on this line
+            "03/11/26 UPI-METRO 50.00 600.00",
+            "04/11/26 UPI-CHAI 20.00 580.00",
+        )
+        val rows = com.kharchacheck.app.domain.read.StatementParser.fromLines(lines, nov).rows
+        assertEquals(listOf(25000L, 10000L, 5000L, 2000L), rows.map { it.amountPaise })  // 650 is the balance; the amount (100) comes from 750 → 650
+        assertTrue(rows.all { it.sure })
     }
 }

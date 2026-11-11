@@ -16,7 +16,13 @@ import com.kharchacheck.app.data.db.PayeeRuleEntity
 import com.kharchacheck.app.data.db.RecurringEntity
 import com.kharchacheck.app.data.db.TxnEntity
 import com.kharchacheck.app.data.repo.SettingsRepository
+import com.kharchacheck.app.data.db.AttachmentEntity
+import com.kharchacheck.app.data.files.FileVault
 import com.kharchacheck.app.domain.BackupCrypto
+import com.kharchacheck.app.domain.StreamCrypto
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -28,12 +34,15 @@ import org.json.JSONObject
  */
 class BackupManager(private val context: Context, private val db: KharchaDatabase, private val settings: SettingsRepository) {
 
+    private val vault = FileVault(context)
+
     suspend fun export(uri: Uri, password: CharArray): Int = withContext(Dispatchers.IO) {
         context.contentResolver.openOutputStream(uri, "wt")?.use { exportTo(it, password) } ?: error("Couldn't write the file")
     }
 
     /** Writes an encrypted backup to any stream (a picked file, or a file in the auto-backup folder). */
-    suspend fun exportTo(out: java.io.OutputStream, password: CharArray): Int = withContext(Dispatchers.IO) {
+    suspend fun exportTo(out: java.io.OutputStream, password: CharArray, includeFiles: Boolean? = null): Int = withContext(Dispatchers.IO) {
+        val withFiles = includeFiles ?: settings.current().backupIncludeFiles
         val txns = db.txns().all()
         val json = JSONObject()
             .put("format", "kharcha-check-backup").put("version", 2).put("exportedAt", System.currentTimeMillis())
@@ -81,17 +90,66 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                     .put("hidden", JSONArray(s.hiddenIds.toList()))
                     .put("dependents", s.dependents).put("risk", s.risk).put("emergencySaved", s.emergencySavedPaise)
             })
-        val blob = BackupCrypto.encrypt(json.toString().toByteArray(Charsets.UTF_8), password)
-        password.fill('\u0000')
-        out.write(blob)
+        // KCB3: a ZIP streamed through chunked encryption. Files first (one at a time, never all in memory),
+        // then data.json listing only the attachments whose files actually made it into the backup.
+        val included = JSONArray()
+        try {
+            ZipOutputStream(StreamCrypto.encrypting(out, password)).use { z ->
+                if (withFiles) {
+                    for (a in db.attachments().all()) {
+                        val bytes = runCatching { vault.read(a.fileName) }.getOrNull() ?: continue
+                        z.putNextEntry(ZipEntry("files/${a.fileName}")); z.write(bytes); z.closeEntry()
+                        included.put(JSONObject().put("id", a.id).put("kind", a.kind).put("txn", a.txnId ?: JSONObject.NULL).put("month", a.month ?: JSONObject.NULL)
+                            .put("label", a.label).put("mime", a.mime).put("file", a.fileName).put("orig", a.originalName).put("size", a.sizeBytes).put("created", a.createdAt))
+                    }
+                    if (vault.exists(FileVault.PROFILE)) runCatching { vault.read(FileVault.PROFILE) }.getOrNull()?.let {
+                        z.putNextEntry(ZipEntry("files/${FileVault.PROFILE}")); z.write(it); z.closeEntry()
+                    }
+                }
+                json.put("attachments", included).put("includesFiles", withFiles)
+                z.putNextEntry(ZipEntry("data.json")); z.write(json.toString().toByteArray(Charsets.UTF_8)); z.closeEntry()
+            }
+        } finally { password.fill('\u0000') }
         txns.size
     }
 
     /** Replaces everything on this phone with the backup's contents. Returns number of entries restored. */
     suspend fun import(uri: Uri, password: CharArray): Int = withContext(Dispatchers.IO) {
-        val blob = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("Couldn't read the file")
-        val plain = try { BackupCrypto.decrypt(blob, password) } finally { password.fill('\u0000') }
-        val j = JSONObject(String(plain, Charsets.UTF_8))
+        val cr = context.contentResolver
+        val head = cr.openInputStream(uri)?.use { s -> val b = ByteArray(4); var n = 0; while (n < 4) { val r = s.read(b, n, 4 - n); if (r < 0) break; n += r }; b.copyOf(n) }
+            ?: error("Couldn't read the file")
+        if (!StreamCrypto.isKcb3(head)) {
+            // Older backups (KCB2): one encrypted JSON blob, no files.
+            val blob = cr.openInputStream(uri)?.use { it.readBytes() } ?: error("Couldn't read the file")
+            val plain = try { BackupCrypto.decrypt(blob, password) } finally { password.fill('\u0000') }
+            return@withContext apply(JSONObject(String(plain, Charsets.UTF_8)), withFiles = false)
+        }
+        var jsonText: String? = null
+        vault.beginRestore()
+        try {
+            cr.openInputStream(uri)?.use { raw ->
+                ZipInputStream(StreamCrypto.decrypting(raw.buffered(), password)).use { z ->
+                    while (true) {
+                        val e = z.nextEntry ?: break
+                        when {
+                            e.name == "data.json" -> jsonText = String(z.readBytes(), Charsets.UTF_8)
+                            e.name.startsWith("files/") -> vault.stage(e.name.removePrefix("files/"), z.readBytes())
+                        }
+                    }
+                }
+            } ?: error("Couldn't read the file")
+            val j = JSONObject(jsonText ?: throw StreamCrypto.TruncatedException())
+            val n = apply(j, withFiles = j.optBoolean("includesFiles"))
+            if (j.optBoolean("includesFiles")) vault.commitRestore() else vault.abortRestore()
+            n
+        } catch (e: Exception) {
+            vault.abortRestore()
+            throw e
+        } finally { password.fill('\u0000') }
+    }
+
+    /** Replaces everything on this phone with the backup's data. Returns the number of entries restored. */
+    private suspend fun apply(j: JSONObject, withFiles: Boolean): Int {
         require(j.optString("format") == "kharcha-check-backup") { "This isn't a Kharcha Check backup" }
 
         fun arr(name: String) = j.optJSONArray(name) ?: JSONArray()
@@ -118,7 +176,12 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
         val snaps = arr("netSnapshots").mapObj { NetSnapshotEntity(it.getString("m"), it.getLong("v")) }
         val rules = arr("rules").mapObj { PayeeRuleEntity(it.getLong("id"), it.getString("pattern"), it.getLong("cat")) }
 
+        val attachments = if (withFiles) arr("attachments").mapObj {
+            AttachmentEntity(it.getLong("id"), it.getString("kind"), if (it.isNull("txn")) null else it.getLong("txn"), if (it.isNull("month")) null else it.getString("month"),
+                it.optString("label"), it.getString("mime"), it.getString("file"), it.optString("orig"), it.optLong("size"), it.optLong("created"))
+        } else null
         db.withTransaction {
+            if (attachments != null) { db.attachments().clear(); db.attachments().insertAll(attachments) }
             db.txns().clear(); db.budgets().clear(); db.goals().clear(); db.rules().clear(); db.recurring().clear(); db.dues().clear(); db.bills().clear(); db.categories().clear()
             db.categories().insertAll(cats); db.txns().insertAll(txns); db.budgets().insertAll(budgets)
             db.goals().insertAll(goals); db.rules().insertAll(rules); db.recurring().insertAll(recurring); db.dues().insertAll(dues); db.bills().insertAll(bills)
@@ -138,6 +201,6 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                 dependents = s.optBoolean("dependents"), risk = s.optString("risk", "BALANCED"), emergencySavedPaise = s.optLong("emergencySaved"),
             ))
         }
-        txns.size
+        return txns.size
     }
 }

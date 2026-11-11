@@ -10,7 +10,7 @@
 | Monthly report, 50/30/20, insights, PDF / CSV | `domain/ReportEngine.kt`, `feature/ReportScreen.kt`, `export/ReportPdf.kt`, `domain/CsvWriter.kt` |
 | Streaks, XP, levels, badges, challenges | `domain/Gamification.kt`, `feature/GrowScreen.kt` |
 | Golden rules, SIP / Rule of 72 maths | `domain/GoldenRules.kt`, `domain/InvestMath.kt` |
-| Optional SMS (smart edition), share / paste | `domain/sms/SmsParser.kt`, `src/smart/...`, `MainActivity.kt` |
+| Share / paste bank-message text (no SMS permission) | `domain/sms/SmsParser.kt`, `MainActivity.kt` |
 | Review inbox, learning rules | `feature/ActivityScreen.kt`, `data/repo/FinanceRepository.kt` |
 | Password backup / restore | `domain/BackupCrypto.kt`, `export/BackupManager.kt` |
 | App lock, screenshot block, reminders | `MainActivity.kt`, `work/DailyWorker.kt`, `work/Notifier.kt` |
@@ -41,3 +41,4 @@
 | Bulk edit (multi-select), undo | `feature/ActivityScreen.kt`, `ui/AppViewModel.kt` |
 | Hidden entries (biometric unlock), mask amounts | `ui/AppViewModel.kt` (`derive`), `feature/HiddenScreen.kt`, `feature/HomeScreen.kt`, `MainActivity.kt` (`onStop`) |
 | Import history with batch delete | `feature/StatementsScreen.kt`, `ui/AppViewModel.kt` (`deleteImportBatch`) |
+| Balance-verified statement amounts (unsure → 0, never guessed) | `domain/read/PdfTable.kt` (`verifyWithBalance`), `feature/ImportScreen.kt` |

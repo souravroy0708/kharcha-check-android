@@ -5,7 +5,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 /** Things only the Activity can do (system pickers, permissions, biometrics). Screens call these. */
 class PlatformActions(
     val requestNotifications: () -> Unit,
-    val requestSms: (onResult: (Boolean) -> Unit) -> Unit,
     val canUseDeviceLock: () -> Boolean,
     val authenticate: (title: String, onSuccess: () -> Unit) -> Unit,
     val exportCsv: () -> Unit,

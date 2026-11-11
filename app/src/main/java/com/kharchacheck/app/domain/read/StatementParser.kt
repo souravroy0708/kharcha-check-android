@@ -81,53 +81,34 @@ object StatementParser {
 
         val usable = raws.filter { it.amounts.isNotEmpty() }
         val rows = if (isCard) cardRows(usable) else bankRows(usable, opening)
-        return Result(rows.filter { it.amountPaise > 0 }, isCard)
+        // Rows whose amount couldn't be confirmed are kept with amount 0, so the user can fill them in.
+        return Result(rows, isCard)
     }
 
+    /** Card statements have no running balance: trust a line only when it has exactly one amount. */
     private fun cardRows(raws: List<Raw>): List<Row> = raws.map { r ->
         val (amt, mark) = r.amounts.last()
+        val clear = r.amounts.size == 1
         val credit = when (mark) { "cr" -> true; "dr" -> false; else -> Regex("""(payment received|thank you|refund|reversal|cashback|credit)""", RegexOption.IGNORE_CASE).containsMatchIn(r.desc) }
-        Row(r.date, clean(r.desc), amt, credit, sure = mark.isNotEmpty())
+        Row(r.date, clean(r.desc), if (clear) amt else 0L, credit, sure = clear)
     }
 
+    /**
+     * Text-line fallback for bank statements. Every amount must be confirmed by the running balance
+     * (via [PdfTable.verifyWithBalance]); a line with a single number is never assumed to be the amount,
+     * because that number is usually the balance. Unconfirmed amounts become 0 for the user to fill in.
+     */
     private fun bankRows(raws: List<Raw>, opening: Long?): List<Row> {
-        // Each row: txn amount = last non-zero amount before the balance; balance = last amount (when 2+ amounts).
-        data class P(val r: Raw, val amt: Long, val bal: Long?, val colCredit: Boolean?, val mark: String)
-        val ps = raws.map { r ->
+        val cands = raws.map { r ->
             val a = r.amounts
             if (a.size >= 2) {
-                val bal = a.last().first
-                val cands = a.dropLast(1)
-                val nonZero = cands.withIndex().filter { it.value.first != 0L }
-                val pick = nonZero.lastOrNull()?.value ?: cands.last()
-                // Two amount columns with one zero (withdrawal, deposit): position tells direction.
-                val col = if (cands.size == 2 && nonZero.size == 1) nonZero[0].index == 1 else null
-                P(r, pick.first, bal, col, pick.second)
-            } else P(r, a[0].first, null, null, a[0].second)
+                val bal = a.last().first.let { if (a.last().second == "dr") -it else it }
+                val others = a.dropLast(1).filter { it.first != 0L }
+                val pick = others.singleOrNull()
+                PdfTable.Candidate(r.date, clean(r.desc), pick?.first ?: 0L, when (pick?.second) { "cr" -> true; "dr" -> false; else -> null }, bal, "", fromColumn = false)
+            } else PdfTable.Candidate(r.date, clean(r.desc), 0L, null, a[0].first, "", fromColumn = false)
         }
-        // Detect chronological order: forward means balance[i] = balance[i-1] ± amount[i].
-        var fwd = 0; var rev = 0
-        for (i in 1 until ps.size) {
-            val b0 = ps[i - 1].bal ?: continue; val b1 = ps[i].bal ?: continue
-            if (abs(abs(b1 - b0) - ps[i].amt) <= 1) fwd++
-            if (abs(abs(b1 - b0) - ps[i - 1].amt) <= 1) rev++
-        }
-        val forward = fwd >= rev
-        return ps.mapIndexed { i, p ->
-            val older: Long? = if (forward) (if (i == 0) opening else ps[i - 1].bal) else ps.getOrNull(i + 1)?.bal
-            val byBalance = if (p.bal != null && older != null) when {
-                abs(older + p.amt - p.bal) <= 1 -> true
-                abs(older - p.amt - p.bal) <= 1 -> false
-                else -> null
-            } else null
-            val byMark = when (p.mark) { "cr" -> true; "dr" -> false; else -> null }
-            val byWords = when {
-                CREDIT_WORDS.containsMatchIn(p.r.desc) && !DEBIT_WORDS.containsMatchIn(p.r.desc) -> true
-                else -> false
-            }
-            val credit = byBalance ?: byMark ?: p.colCredit ?: byWords
-            Row(p.r.date, clean(p.r.desc), p.amt, credit, p.bal, sure = byBalance != null || byMark != null || p.colCredit != null)
-        }
+        return PdfTable.verifyWithBalance(cands, opening, creditCard = false, hasBalanceColumn = true)
     }
 
     private fun leadingDate(line: String, hint: YearMonth): Pair<LocalDate, Int>? {

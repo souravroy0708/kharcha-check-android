@@ -202,9 +202,11 @@ object Gamification {
         if (challengesWon > 0) e += "challenge_won"
 
         val current = YearMonth.from(today)
-        val months = txns.map { it.month }.filter { it < current }.toSet()
-        for (m in months) {
-            val r = ReportEngine.build(m, txns, categories, ReportEngine.Config(budgetPaise = budgetPaise, today = today))
+        // Group once; each month's report only needs that month and the one before (not every entry again).
+        val byMonth = txns.groupBy { it.month }
+        for (m in byMonth.keys.filter { it < current }) {
+            val slice = byMonth[m].orEmpty() + byMonth[m.minusMonths(1)].orEmpty()
+            val r = ReportEngine.build(m, slice, categories, ReportEngine.Config(budgetPaise = budgetPaise, today = today))
             if (r.incomePaise > 0 && r.savingsRatePct >= 20) e += "saver_20"
             if (r.split.followsRule) e += "rule_503020"
             if (budgetPaise > 0 && r.spendPaise in 1..budgetPaise) e += "under_budget"

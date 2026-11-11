@@ -29,29 +29,23 @@ leaks in your spending, turn the savings into investments, and make it a daily h
 | **🙈 Hidden entries** | Hide any entry (editor toggle, or multi-select in Activity). Hidden entries are left out of every list, search, total, report, trend, Wrapped, export and notification. Settings → Hidden entries unlocks them with fingerprint / screen lock until the app leaves the screen; the count isn't shown while locked. Duplicate checks still see them, so re-imports don't resurface them. 👁 on Home masks the big amounts. |
 | **Undo a bad import** | Statements → Import history lists each import (entries, date range) with one-tap Delete + Undo. Activity has an "📄 Imported" filter for picking individual rows. |
 | **Export** | Excel (.xlsx with real dates/numbers, frozen header, filters, Monthly summary + By category sheets) or CSV (UTF-8 with BOM so ₹ shows in Excel); any period and entry types; Save to phone or Share; explains export vs full backup for uninstalling. |
+| **Budget alerts** | Warning when a new entry crosses 80% / 100% of a category or the monthly budget; daily check also catches statement imports. Once per threshold per month. |
 | **Grow** | Levels and XP, streaks, 21-day habit grid, 14 badges, 8 challenges (No delivery week, Junk-free 10, Leak-free week...), savings goals, cut-a-leak → SIP calculator, emergency fund target, 18 golden rules. |
 | **Repeating entries** | Tick "Repeat every month" when saving rent, EMI, SIP, salary or a subscription. It's added to Review on its day each month (catching up at most 3 months if the phone was off). Pause or stop any time in Settings. |
 | **Attachments** | Profile photo; receipts and GPay / PhonePe / Paytm screenshots on any entry (or share a screenshot to the app to start an entry); monthly bank, credit card and UPI statements (Report → Statements). All encrypted in the app with a Keystore key; in-app viewer with zoom and PDF pages; "Open in app" for password-protected statements. Not in `.kcbak` backups. |
 | **✨ Auto-read (optional, on by default)** | **Screenshots:** share or attach a GPay / PhonePe / Paytm / BHIM screenshot and amount, payee, date, UPI ref and category are filled in (only empty fields; failed payments are ignored). **Statements:** attach a bank, credit card or UPI statement, or open/share it from Gmail, Drive or Files ("Read with Kharcha Check"), and get a review list of every transaction. Digital PDFs are read exactly (PdfBox text extraction), scanned pages fall back to OCR, password-protected PDFs work on every Android version, and .xlsx / HTML ".xls" / CSV downloads are parsed directly. Debit/credit is confirmed against the running balance; already-logged entries are unticked; edit any row, then "Add & confirm" or "Save as drafts" (to the Review inbox). Runs entirely on the phone: no internet, no Google services. Toggle in Settings. |
 | **Home-screen widget** | Streak, logged-today status, one-tap **+ Add**, and today's money thought. Shows no amounts, on purpose. |
 | **Wealth & net worth** | Mutual funds valued daily from AMFI NAVs (search ~30,000 schemes by name), FDs, PPF/EPF/NPS, stocks, gold, bank balances, cash, property and loans. Net worth, gain %, allocation and a monthly net-worth trend. |
+| **Backups (v3)** | `.kcbak` now holds entries **and** statements, receipts and the profile photo (optional), streamed through chunked AES-256-GCM so any size works without running out of memory; damaged or incomplete backups are detected and never half-restored. |
 | **Automatic backup** | Daily encrypted `.kcbak` into a folder you choose (pick Google Drive for cloud backup); keeps the newest 7; password stored wrapped by Android Keystore so it runs unattended. |
 | **Crash reports** | Saved locally; next launch offers to email the technical details. Nothing sent silently. |
 | **Settings** | Income, budget, category budgets, categories, age, expected return, reminders, app lock, screenshot block, theme, password backup / restore, CSV export, delete everything, privacy centre. |
 
-## Two editions, one codebase
+## No SMS access
 
-| | `standard` | `smart` |
-| --- | --- | --- |
-| SMS permissions | **None** | `READ_SMS`, `RECEIVE_SMS`, off until the user turns it on |
-| Share / paste bank SMS | Yes | Yes |
-| Play Store | Publish now, no declaration | Needs the **SMS permission declaration** approved first |
-
-Both use the same `applicationId`, so publish `standard` first, then upload `smart` as an update once Play approves.
-In India, Play Protect blocks *sideloaded* apps that request SMS permissions, so `smart` is distributed only through
-Play; GitHub Releases carry `standard` only. For your own testing, CI builds `smart-TEST.apk` (separate package,
-"Kharcha Check Test"); install it with `adb install` (see `docs/PLAY_STORE.md` §6).
-Captured SMS always lands in the Review inbox first; every field stays editable; message text is never stored.
+The app has no SMS permission and never reads messages. Entries come from manual entry, bank / card statement
+import (PDF, Excel, CSV), payment screenshots, or text the user chooses to paste or share. CI fails the build if an
+SMS permission ever appears in the release manifest.
 
 ## App size
 
@@ -80,11 +74,11 @@ layer for Android 13+ themed icons; the notification icon matches.
 ```
 
 Every push to `main` runs `.github/workflows/build-apk.yml`:
-unit tests → `standard` + `smart` APKs → privacy gate (no INTERNET / network state / AD_ID; no SMS in standard)
+unit tests → release APK → privacy gate (no SMS, no AD_ID, no location/contacts, HTTPS-only)
 → signed `.aab` bundles (when the `KC_KEYSTORE_*` secrets exist) → GitHub Release with `KharchaCheck.apk`.
 
 Artifacts: `KharchaCheck-apks-2.0.N` and `KharchaCheck-play-bundles-2.0.N`. Upload
-`KharchaCheck-2.0.N-standard.aab` to Play. Publishing steps: [`docs/PLAY_STORE.md`](docs/PLAY_STORE.md).
+`KharchaCheck-2.0.N.aab` to Play. Publishing steps: [`docs/PLAY_STORE.md`](docs/PLAY_STORE.md).
 
 > **Signing key:** keep `~/kharchacheck-signing/` backed up offline. If you lose the upload key you need
 > Google's key reset process. If you already set up signing for v1, the same secrets keep working.
@@ -106,14 +100,16 @@ app/src/main/java/com/kharchacheck/app/
   work            DailyWorker (reminder, month-end report, repeating entries), Notifier
   widget          KharchaWidget (home screen)
   export          ReportPdf, BackupManager
-app/src/standard  SmsSupport stub (no permissions)
-app/src/smart     SmsSupport, SmsReceiver, manifest with SMS permissions
-app/src/test      78 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
+app/src/test      87 tests: SMS golden set, reports, gamification, daily cards, recurring, crypto, CSV, keypad
 ```
 
 `./gradlew testStandardDebugUnitTest` runs the tests locally.
 
 ## Architecture notes
+
+Full review with findings and roadmap: [`docs/ARCHITECTURE_REVIEW.md`](docs/ARCHITECTURE_REVIEW.md).
+Database changes: read [`docs/DATABASE.md`](docs/DATABASE.md) first.
+
 
 - **Where the internet is used, and why:** fund prices (needs daily data; whole-file download keeps holdings private) and backups (to the user's own storage). Everything else, including OCR, statement reading and analytics, stays on the phone because it is just as good there and keeps money data private.
 - **Analytics run on the phone**, off the main thread, from the user's own entries. Thousands of entries compute in milliseconds, so there is no analytics server: it would add cost and an upload of everyone's spending without improving any chart. A backend is worth it for multi-device sync or family sharing, as a deliberate product decision.

@@ -36,17 +36,17 @@ jobs:
             echo "KC_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
           fi
 
-      - name: Unit tests (SMS golden set, report maths, gamification, crypto)
+      - name: Unit tests (statement parser accuracy, reports, gamification, crypto, export)
         run: |
           chmod +x gradlew
-          ./gradlew testStandardDebugUnitTest --console=plain
+          ./gradlew testDebugUnitTest --console=plain
 
-      - name: Build release APKs (standard and smart)
+      - name: Build release APK
         env:
           KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
-        run: ./gradlew assembleStandardRelease assembleSmartRelease assembleSmartDebug -PcompressNativeLibs --console=plain
+        run: ./gradlew assembleRelease -PcompressNativeLibs --console=plain
 
       # Google Play needs an .aab. Only built with your real key: Play rejects debug-signed bundles.
       - name: Build signed Play bundles (.aab)
@@ -55,7 +55,7 @@ jobs:
           KC_KEYSTORE_PASSWORD: ${{ secrets.KC_KEYSTORE_PASSWORD }}
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
-        run: ./gradlew bundleStandardRelease bundleSmartRelease --console=plain
+        run: ./gradlew bundleRelease --console=plain
 
       - name: Warn when no Play bundle was built
         if: env.KC_KEYSTORE_PATH == ''
@@ -64,36 +64,52 @@ jobs:
       - name: Privacy gate (fails the build if a permission sneaks in)
         run: |
           set -e
-          check() {
-            local flavor=$1
-            local m=$(find app/build/intermediates/merged_manifest -path "*${flavor}Release*" -name AndroidManifest.xml | head -n1)
-            echo "Checking $flavor: $m"
-            [ -f "$m" ] || { echo "::error::Merged manifest for $flavor not found"; exit 1; }
-            # Internet is allowed (AMFI fund prices). Advertising IDs and location never are.
-            if grep -q 'AD_ID"' "$m"; then echo "::error::$flavor has AD_ID"; exit 1; fi
-            if grep -q 'ACCESS_FINE_LOCATION"\|ACCESS_COARSE_LOCATION"\|READ_CONTACTS"' "$m"; then echo "::error::$flavor requests location or contacts"; exit 1; fi
-            grep -q 'cleartextTrafficPermitted\|networkSecurityConfig' "$m" || { echo "::error::$flavor lost its HTTPS-only network config"; exit 1; }
-            echo "$m"
-          }
-          STD=$(check standard | tail -n1)
-          SMART=$(check smart | tail -n1)
-          if grep -q 'READ_SMS\|RECEIVE_SMS' "$STD"; then echo "::error::standard edition must not request SMS permissions"; exit 1; fi
-          grep -q 'READ_SMS' "$SMART" || { echo "::error::smart edition is missing READ_SMS"; exit 1; }
-          echo "✓ Both editions: no ad id, no location/contacts, HTTPS-only. Standard: no SMS."
+          m=$(find app/build/intermediates/merged_manifest -path "*release*" -name AndroidManifest.xml | head -n1)
+          echo "Checking: $m"
+          [ -f "$m" ] || { echo "::error::Merged release manifest not found"; exit 1; }
+          # Internet is allowed (AMFI fund prices). SMS, advertising IDs, location and contacts never are.
+          if grep -q 'READ_SMS"\|RECEIVE_SMS"\|SEND_SMS"' "$m"; then echo "::error::SMS permission found: the app must never read messages"; exit 1; fi
+          if grep -q 'AD_ID"' "$m"; then echo "::error::AD_ID found"; exit 1; fi
+          if grep -q 'ACCESS_FINE_LOCATION"\|ACCESS_COARSE_LOCATION"\|READ_CONTACTS"' "$m"; then echo "::error::location or contacts permission found"; exit 1; fi
+          grep -q 'cleartextTrafficPermitted\|networkSecurityConfig' "$m" || { echo "::error::HTTPS-only network config missing"; exit 1; }
+          echo "✓ No SMS, no ad id, no location/contacts, HTTPS-only."
+
+      # Users have real data. A table change without a version bump + migration would crash the app on launch.
+      - name: Database schema guard
+        run: |
+          changed=$(git status --porcelain -- app/schemas | grep -v '^??' || true)
+          untracked=$(git status --porcelain -- app/schemas | grep '^??' || true)
+          if [ -n "$changed" ]; then
+            echo "::error::The database schema changed but its version did not. Bump the version in KharchaDatabase, add a Migration to MIGRATIONS, and commit the new schema JSON. See docs/DATABASE.md."
+            git --no-pager diff --stat -- app/schemas
+            exit 1
+          fi
+          if [ -n "$untracked" ]; then
+            echo "::warning::New database schema file(s) not committed yet: $untracked — download the 'room-schema' artifact and commit it to app/schemas/ so future changes are checked."
+          fi
+          echo "✓ Database schema unchanged or properly versioned."
+
+      - name: Android Lint (report only)
+        continue-on-error: true
+        run: ./gradlew lintRelease --console=plain
+
+      - name: Upload lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-release.html
+          retention-days: 14
+          if-no-files-found: ignore
 
       - name: Name outputs
         run: |
           V=2.0.${{ github.run_number }}
           mkdir -p out
-          cp app/build/outputs/apk/standard/release/*.apk "out/KharchaCheck-$V-standard.apk"
-          cp app/build/outputs/apk/smart/release/*.apk "out/KharchaCheck-$V-smart.apk"
-          cp "out/KharchaCheck-$V-standard.apk" out/KharchaCheck.apk
-          # Developer test build of the SMS edition: separate package ("Kharcha Check Test"), installs next to the real app.
-          # Install it with: adb install -r KharchaCheck-<ver>-smart-TEST.apk  (Play Protect blocks SMS apps sideloaded from WhatsApp/browsers in India)
-          cp app/build/outputs/apk/smart/debug/*.apk "out/KharchaCheck-$V-smart-TEST.apk"
+          cp app/build/outputs/apk/release/*.apk "out/KharchaCheck-$V.apk"
+          cp "out/KharchaCheck-$V.apk" out/KharchaCheck.apk
           if [ -n "${KC_KEYSTORE_PATH:-}" ]; then
-            cp app/build/outputs/bundle/standardRelease/*.aab "out/KharchaCheck-$V-standard.aab"
-            cp app/build/outputs/bundle/smartRelease/*.aab "out/KharchaCheck-$V-smart.aab"
+            cp app/build/outputs/bundle/release/*.aab "out/KharchaCheck-$V.aab"
           fi
           ls -la out
 
@@ -104,8 +120,8 @@ jobs:
           KC_KEY_ALIAS: ${{ secrets.KC_KEY_ALIAS }}
           KC_KEY_PASSWORD: ${{ secrets.KC_KEY_PASSWORD }}
         run: |
-          ./gradlew assembleStandardRelease -PcompressNativeLibs -PapkAbi=arm64-v8a --console=plain
-          cp app/build/outputs/apk/standard/release/*.apk "out/KharchaCheck-2.0.${{ github.run_number }}-arm64.apk"
+          ./gradlew assembleRelease -PcompressNativeLibs -PapkAbi=arm64-v8a --console=plain
+          cp app/build/outputs/apk/release/*.apk "out/KharchaCheck-2.0.${{ github.run_number }}-arm64.apk"
           echo "APK sizes:"; ls -la out/*.apk
 
       - name: Upload Play bundles (.aab)
@@ -146,7 +162,6 @@ jobs:
             Private expense tracker. No internet permission, no account, encrypted on your phone.
             **Install:** download `KharchaCheck-…-arm64.apk` (smallest, fits almost every phone from the last ~7 years).
             If it says "App not installed" on an older phone, use `KharchaCheck.apk` (works on all phones).
-            Automatic bank-SMS reading arrives through the Play Store once Google approves it.
 
       - name: Upload Room schema (commit it so future migrations can be tested)
         uses: actions/upload-artifact@v4

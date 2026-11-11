@@ -34,7 +34,6 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kharchacheck.app.data.repo.ThemeMode
-import com.kharchacheck.app.sms.SmsSupport
 import com.kharchacheck.app.ui.AppViewModel
 import com.kharchacheck.app.ui.KharchaRoot
 import com.kharchacheck.app.ui.LocalPlatform
@@ -57,7 +56,6 @@ class MainActivity : FragmentActivity() {
     private val navRequests = Channel<String>(Channel.BUFFERED)
 
     private var pendingPassword: CharArray? = null
-    private var smsCallback: ((Boolean) -> Unit)? = null
     private var stoppedAt = 0L
     private var imageCallback: ((Uri) -> Unit)? = null
     private var docCallback: ((Uri) -> Unit)? = null
@@ -73,9 +71,6 @@ class MainActivity : FragmentActivity() {
 
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) vm.say("No problem. You can turn reminders on later in Settings.")
-    }
-    private val smsPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
-        smsCallback?.invoke(res.values.all { it }); smsCallback = null
     }
     private val csvDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri -> uri?.let(vm::exportCsv) }
     private val pdfDoc = registerForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri -> uri?.let(vm::exportPdf) }
@@ -117,11 +112,6 @@ class MainActivity : FragmentActivity() {
         val actions = PlatformActions(
             requestNotifications = {
                 if (Build.VERSION.SDK_INT >= 33 && !Notifier.canPost(this)) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            },
-            requestSms = { cb ->
-                if (!SmsSupport.available) cb(false)
-                else if (SmsSupport.hasPermission(this)) cb(true)
-                else { smsCallback = cb; smsPermission.launch(SmsSupport.permissions) }
             },
             canUseDeviceLock = {
                 BiometricManager.from(this).canAuthenticate(BIOMETRIC_WEAK or DEVICE_CREDENTIAL) == BiometricManager.BIOMETRIC_SUCCESS

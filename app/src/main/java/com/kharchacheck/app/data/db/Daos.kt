@@ -83,6 +83,7 @@ interface AttachmentDao {
     @Query("SELECT * FROM attachments ORDER BY createdAt DESC") fun observe(): Flow<List<AttachmentEntity>>
     @Query("SELECT * FROM attachments") suspend fun all(): List<AttachmentEntity>
     @Insert suspend fun insert(a: AttachmentEntity): Long
+    @Insert suspend fun insertAll(list: List<AttachmentEntity>)
     @Query("UPDATE attachments SET txnId = :txnId WHERE id IN (:ids)") suspend fun link(ids: List<Long>, txnId: Long)
     @Query("DELETE FROM attachments WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE attachments SET kind = :kind, month = :month WHERE id = :id") suspend fun setKind(id: Long, kind: String, month: String?)

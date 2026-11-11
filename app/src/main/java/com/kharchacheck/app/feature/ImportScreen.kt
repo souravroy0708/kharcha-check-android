@@ -165,14 +165,17 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
         val matches = Dedupe.check(d.allTxns, drafts.map { it.second })  // includes hidden entries
         return drafts.mapIndexed { i, (r, t, _) ->
             val m = matches[i]
-            ImportItem(i, t, selected = m.verdict == Dedupe.Verdict.NEW, verdict = m.verdict,
+            ImportItem(i, t, selected = m.verdict == Dedupe.Verdict.NEW && t.amountPaise > 0, verdict = m.verdict,
                 matchedWith = m.existing?.let { e -> if (d.isHidden(e) && !d.revealed) "a hidden entry" else "${e.payee.ifBlank { d.catMap[e.categoryId]?.name ?: "entry" }} on ${e.date.format(dayFmt)}" },
                 sure = r.sure, narration = r.description)
         }
     }
 
-    fun toggle(key: Int) = update { it.map { x -> if (x.key == key) x.copy(selected = !x.selected) else x } }
-    fun setAll(on: Boolean, includeDuplicates: Boolean) = update { it.map { x -> if (x.verdict == Dedupe.Verdict.DUPLICATE && !includeDuplicates) x.copy(selected = false) else x.copy(selected = on) } }
+    /** Rows without a confirmed amount can't be ticked until the user enters one. */
+    fun toggle(key: Int) = update { it.map { x -> if (x.key == key && x.txn.amountPaise > 0) x.copy(selected = !x.selected) else x } }
+    fun setAll(on: Boolean, includeDuplicates: Boolean) = update {
+        it.map { x -> if ((x.verdict == Dedupe.Verdict.DUPLICATE && !includeDuplicates) || x.txn.amountPaise == 0L) x.copy(selected = false) else x.copy(selected = on) }
+    }
     fun edit(key: Int, payee: String, amountPaise: Long, date: LocalDate, note: String) = update {
         it.map { x ->
             if (x.key != key) x else {
@@ -191,7 +194,7 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
 
     fun save(asDrafts: Boolean, onDone: (List<Long>) -> Unit) = viewModelScope.launch {
         val p = _phase.value as? ImportPhase.Review ?: return@launch
-        val ids = c.finance.importAll(p.items.filter { it.selected }.map { it.txn }, asDrafts)
+        val ids = c.finance.importAll(p.items.filter { it.selected && it.txn.amountPaise > 0 }.map { it.txn }, asDrafts)
         fileSha?.let { c.settings.rememberImportedFile(it) }
         onDone(ids)
     }
@@ -276,7 +279,8 @@ private fun Review(p: ImportPhase.Review, d: AppData, ivm: ImportViewModel, onPi
     val dupes = p.items.count { it.verdict == Dedupe.Verdict.DUPLICATE }
     val possible = p.items.count { it.verdict == Dedupe.Verdict.POSSIBLE }
     val fresh = p.items.count { it.verdict == Dedupe.Verdict.NEW }
-    val unsure = p.items.count { !it.sure && it.verdict != Dedupe.Verdict.DUPLICATE }
+    val needAmount = p.items.count { it.txn.amountPaise == 0L && it.verdict != Dedupe.Verdict.DUPLICATE }
+    val unsure = p.items.count { !it.sure && it.txn.amountPaise > 0 && it.verdict != Dedupe.Verdict.DUPLICATE }
     val visible = if (showDupes) p.items else p.items.filter { it.verdict != Dedupe.Verdict.DUPLICATE }
     val chosen = p.items.filter { it.selected }
     val outSum = chosen.filter { it.txn.type != TxType.INCOME }.sumOf { it.txn.amountPaise }
@@ -293,13 +297,16 @@ private fun Review(p: ImportPhase.Review, d: AppData, ivm: ImportViewModel, onPi
                         Pill("✨ $fresh new", Kc.colors.goodBg, Kc.colors.good)
                         if (dupes > 0) Pill("✓ $dupes already in app", Kc.colors.chip, Kc.colors.muted) { showDupes = !showDupes }
                         if (possible > 0) Pill("? $possible maybe", Kc.colors.warnBg, Coral)
+                        if (needAmount > 0) Pill("✎ $needAmount need amount", Kc.colors.warnBg, Coral)
                     }
+                    if (needAmount > 0) Text("$needAmount rows have no amount because it couldn't be confirmed against the balance. Rather than guess, they're left blank: tap one to enter it, or skip it.",
+                        style = MaterialTheme.typography.bodySmall, color = Coral)
                     p.seenBefore?.let { Text("You imported this file on ${it.format(dayFmt)}. Rows already in the app are skipped automatically.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.text) }
                     if (dupes > 0) Text(if (showDupes) "Showing already-imported rows (unticked). Tap ✓ above to hide them." else "Already-imported rows are hidden and won't be added again.",
                         style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     if (possible > 0) Text("\"Maybe\" rows match an entry you already have (same amount, within a day). They're unticked; tick them if they're different.",
                         style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
-                    if (unsure > 0) Text("⚠️ $unsure rows couldn't be checked against the balance. Glance at their amount and direction.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    if (unsure > 0) Text("⚠️ $unsure rows have an amount that couldn't be cross-checked (no balance shown). Glance at them.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     Text("Tap a row to tick/untick · ✎ to edit payee, amount, date or note · the icon to change category.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Pill("Select all new", Kc.colors.chip, Kc.colors.text) { ivm.setAll(true, includeDuplicates = false) }
@@ -313,10 +320,10 @@ private fun Review(p: ImportPhase.Review, d: AppData, ivm: ImportViewModel, onPi
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                         .background(if (item.verdict == Dedupe.Verdict.DUPLICATE) Kc.colors.chip else Kc.colors.card)
-                        .clickable { ivm.toggle(item.key) }.padding(end = 6.dp),
+                        .clickable { if (item.txn.amountPaise == 0L) onEdit(item) else ivm.toggle(item.key) }.padding(end = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Checkbox(item.selected, { ivm.toggle(item.key) })
+                    Checkbox(item.selected, { if (item.txn.amountPaise == 0L) onEdit(item) else ivm.toggle(item.key) })
                     Box(Modifier.clickable { onPick(item) }) { CategoryIcon(cat, 36.dp) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
@@ -324,12 +331,13 @@ private fun Review(p: ImportPhase.Review, d: AppData, ivm: ImportViewModel, onPi
                         val status = when (item.verdict) {
                             Dedupe.Verdict.DUPLICATE -> "already in app" + (item.matchedWith?.let { ": $it" } ?: "")
                             Dedupe.Verdict.POSSIBLE -> "maybe same as ${item.matchedWith ?: "an entry"}"
-                            Dedupe.Verdict.NEW -> if (!item.sure) "⚠️ check" else null
+                            Dedupe.Verdict.NEW -> when { item.txn.amountPaise == 0L -> "amount not confirmed"; !item.sure -> "⚠️ check"; else -> null }
                         }
                         Text(listOfNotNull(item.txn.date.format(DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)), cat?.name, status).joinToString(" · "),
                             style = MaterialTheme.typography.bodySmall, color = if (item.verdict != Dedupe.Verdict.NEW || !item.sure) Coral else Kc.colors.muted, maxLines = 1)
                     }
-                    Text((if (credit) "+" else "−") + Money.format(item.txn.amountPaise, withPaise = true), style = MaterialTheme.typography.titleSmall,
+                    if (item.txn.amountPaise == 0L) Text("✎ Enter amount", style = MaterialTheme.typography.labelLarge, color = Coral)
+                    else Text((if (credit) "+" else "−") + Money.format(item.txn.amountPaise, withPaise = true), style = MaterialTheme.typography.titleSmall,
                         color = if (credit) Kc.colors.good else Kc.colors.text)
                     Text("✎", style = MaterialTheme.typography.titleMedium, color = Kc.colors.muted,
                         modifier = Modifier.clip(RoundedCornerShape(50)).clickable { onEdit(item) }.padding(horizontal = 10.dp, vertical = 6.dp))
@@ -362,7 +370,7 @@ private fun KindSwitch(a: Attachment, onChange: (AttachmentKind) -> Unit) {
 @Composable
 private fun RowEditDialog(item: ImportItem, onDismiss: () -> Unit, onSave: (String, Long, LocalDate, String) -> Unit) {
     var payee by rememberSaveable { mutableStateOf(item.txn.payee) }
-    var amount by rememberSaveable { mutableStateOf(item.txn.amountPaise.let { if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(it / 100, it % 100) }) }
+    var amount by rememberSaveable { mutableStateOf(item.txn.amountPaise.let { if (it == 0L) "" else if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(it / 100, it % 100) }) }
     var note by rememberSaveable { mutableStateOf(item.txn.note) }
     var date by rememberSaveable { mutableStateOf(item.txn.date.toEpochDay()) }
     var picking by rememberSaveable { mutableStateOf(false) }
@@ -373,6 +381,8 @@ private fun RowEditDialog(item: ImportItem, onDismiss: () -> Unit, onSave: (Stri
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(item.narration, style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 3)
+                if (item.txn.amountPaise == 0L) Text("The amount for this row couldn't be confirmed, so it was left blank instead of guessing. Check your statement and type it in.",
+                    style = MaterialTheme.typography.bodySmall, color = Coral)
                 OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Payee / merchant") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(amount, { v -> amount = v.filter { it.isDigit() || it == '.' }.take(12) }, label = { Text("Amount") }, prefix = { Text("₹ ") },
                     singleLine = true, isError = paise == null, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())

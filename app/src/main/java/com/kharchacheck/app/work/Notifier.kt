@@ -16,7 +16,6 @@ import com.kharchacheck.app.R
 /** Local notifications only. No push service, no server. Amounts are hidden on the lock screen. */
 object Notifier {
     const val CH_REMINDERS = "reminders"
-    const val CH_CAPTURE = "captured"
     const val CH_TIPS = "tips"
     const val EXTRA_OPEN = "open"
 
@@ -28,9 +27,8 @@ object Notifier {
         nm.createNotificationChannel(NotificationChannel(CH_TIPS, "Daily money tip", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "One short saving or investing tip each morning, with something small to try"
         })
-        nm.createNotificationChannel(NotificationChannel(CH_CAPTURE, "Captured from bank SMS", NotificationManager.IMPORTANCE_LOW).apply {
-            description = "New entries read from bank alerts, waiting for your review"
-        })
+        // SMS reading was removed: clean up its old notification channel on phones that had it.
+        nm.deleteNotificationChannel("captured")
     }
 
     fun canPost(ctx: Context) = android.os.Build.VERSION.SDK_INT < 33 ||

@@ -129,14 +129,6 @@ class FinanceRepository(private val db: KharchaDatabase) {
         return db.txns().countSimilar(t.amountPaise, t.type.name, t.epochMillis - 120_000, t.epochMillis + 120_000) > 0
     }
 
-    /** Captured SMS always lands in the review inbox first, so the user stays in control of every field. */
-    suspend fun captureFromSms(sender: String, body: String, epochMillis: Long): Txn? {
-        val parsed = (SmsParser.parse(sender, body) as? SmsParser.Outcome.Matched)?.parsed ?: return null
-        val draft = draftFromParsed(parsed, epochMillis, Source.SMS).copy(review = ReviewState.NEEDS_REVIEW)
-        if (isDuplicate(draft)) return null
-        val id = saveTxn(draft)
-        return draft.copy(id = id)
-    }
 
     /** Saves rows from a statement in one transaction, either confirmed or as drafts in the Review inbox. */
     /** Returns the new ids, so the import can be undone in one tap. */

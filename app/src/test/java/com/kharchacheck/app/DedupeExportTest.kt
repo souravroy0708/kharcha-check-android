@@ -75,3 +75,17 @@ class ExportTest {
         assertEquals("46300", rows[2][0])  // Excel serial date for 2026-10-05
     }
 }
+
+class BudgetAlertsTest {
+    @Test fun crossingsFireOncePerThreshold() {
+        val b = com.kharchacheck.app.domain.BudgetAlerts
+        assertEquals(80, b.crossing(2_000_00, 2_450_00, 3_000_00))
+        assertEquals(null, b.crossing(2_450_00, 2_600_00, 3_000_00))   // already past 80%, not yet 100%
+        assertEquals(100, b.crossing(2_600_00, 3_100_00, 3_000_00))
+        assertEquals(100, b.crossing(1_000_00, 3_500_00, 3_000_00))    // jumps straight past both: report the bigger one
+        assertEquals(null, b.crossing(3_100_00, 3_300_00, 3_000_00))
+        assertEquals(null, b.crossing(0, 5_000_00, 0))
+        assertEquals(80, b.level(2_400_00, 3_000_00))
+        assertTrue(b.message("Food Delivery", 3_150_00, 3_000_00, 100).contains("Over"))
+    }
+}

@@ -45,7 +45,6 @@ import com.kharchacheck.app.core.model.Bucket
 import com.kharchacheck.app.core.model.Category
 import com.kharchacheck.app.core.model.Money
 import com.kharchacheck.app.data.repo.ThemeMode
-import com.kharchacheck.app.sms.SmsSupport
 import com.kharchacheck.app.ui.AppViewModel
 import com.kharchacheck.app.ui.LocalPlatform
 import com.kharchacheck.app.ui.components.CategoryIcon
@@ -78,7 +77,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private enum class Dlg { TIP_TIME, AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE, SMS_INFO }
+private enum class Dlg { TIP_TIME, AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,21 +133,11 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         }
         item {
             KcCard(title = "Adding entries") {
-                Text("Fastest: tap the yellow +. Or share any bank SMS / UPI receipt to Kharcha Check from Messages, GPay or PhonePe, or copy it and tap “Paste SMS” on Home.",
+                Text("Fastest: tap the yellow +. Or import a bank statement, share a GPay / PhonePe screenshot, or copy a bank message and tap “Paste SMS” on Home. The app never reads your messages itself.",
                     style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                 SwitchRow("✨ Auto-read screenshots & statements",
                     "Fills entries from GPay / PhonePe / Paytm screenshots and reads bank, card and UPI statements. A built-in offline engine does it on this phone; nothing is uploaded.",
                     s.autoRead) { vm.setAutoRead(it) }
-                if (SmsSupport.available) {
-                    SwitchRow("Read bank SMS automatically", "Optional. Only bank alerts are read; messages are never stored or sent. Everything lands in Review first.",
-                        s.smsCapture && SmsSupport.hasPermission(androidx.compose.ui.platform.LocalContext.current)) { on ->
-                        if (on) dlg = Dlg.SMS_INFO else vm.setSmsCapture(false)
-                    }
-                    if (s.smsCapture) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { vm.importSms(30) }) { Text("Import last 30 days") }
-                        OutlinedButton(onClick = { vm.importSms(90) }) { Text("90 days") }
-                    }
-                }
                 SettingRow("Repeating entries", "Rent, EMIs, SIPs and subscriptions added for you each month", "${recurringCount}") { nav.navigate(RecurringRoute) }
                 SettingRow("Review inbox", "Entries waiting for a quick check", "${data.inbox.size}") { nav.navigate(InboxRoute) }
             }
@@ -204,6 +193,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 }
                 if (s.autoBackup) SettingRow("Back up now", null) { vm.backupNow() }
                 SettingRow("Backup with password", "Save an encrypted .kcbak file anywhere you choose") { dlg = Dlg.BACKUP }
+                SwitchRow("Include statements & receipts in backups", "Bigger backup files, but nothing is lost when you move to a new phone.", s.backupIncludeFiles) { vm.setBackupIncludeFiles(it) }
                 SettingRow("Restore from backup", "Replaces everything on this phone") { dlg = Dlg.RESTORE }
                 SettingRow("Statements & receipts", "Bank, credit card and UPI statements by month") { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }
                 SettingRow("⬇ Export entries (Excel or CSV)", "Any period, with monthly and category summaries") { nav.navigate(com.kharchacheck.app.ui.nav.ExportRoute) }
@@ -213,7 +203,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         }
         item {
             KcCard(title = "About") {
-                SettingRow("Version", null, BuildConfig.VERSION_NAME + if (SmsSupport.available) " · Smart" else "")
+                SettingRow("Version", null, BuildConfig.VERSION_NAME)
                 SettingRow("Send feedback", "Opens your email app. Nothing is sent automatically.") { p.emailSupport() }
                 SettingRow("Open-source licences", "The free software that makes this app possible") { dlg = Dlg.LICENCES }
                 Text("Kharcha Check is educational and not financial advice.",
@@ -263,16 +253,6 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 dismissButton = { TextButton(onClick = { dlg = Dlg.NONE }) { Text("Cancel") } },
             )
         }
-        Dlg.SMS_INFO -> AlertDialog(
-            onDismissRequest = { dlg = Dlg.NONE },
-            title = { Text("Read bank SMS?") },
-            text = { Text("Kharcha Check will read only messages from bank and card senders to pre-fill entries. It skips OTPs and personal messages, never stores message text, and never sends message content anywhere. You can turn this off any time.") },
-            confirmButton = { TextButton(onClick = {
-                dlg = Dlg.NONE
-                p.requestSms { granted -> if (granted) { vm.setSmsCapture(true); vm.importSms(30) } else vm.say("SMS reading stays off. Share or paste still works.") }
-            }) { Text("Allow") } },
-            dismissButton = { TextButton(onClick = { dlg = Dlg.NONE }) { Text("Not now") } },
-        )
         Dlg.TIP_TIME -> {
             val ts = rememberTimePickerState(s.tipHour, s.tipMinute, is24Hour = false)
             AlertDialog(onDismissRequest = { dlg = Dlg.NONE }, text = { TimePicker(ts) },
@@ -313,7 +293,6 @@ fun PrivacyScreen(nav: NavHostController) {
             "🔐" to ("Encrypted on your phone" to "Your entries live in an AES-256 encrypted database. The key is held by your phone's secure hardware (Android Keystore)."),
             "🙅" to ("No account, no tracking" to "No sign-up, no analytics, no ads, no third-party SDKs that phone home. If the app crashes, you choose whether to email the report."),
             "☁️" to ("Backups you control" to "Android's automatic cloud backup is off. Turn on Automatic backup to save encrypted copies to a folder you pick, such as Google Drive."),
-            "✉️" to ("SMS stays optional" to "Reading bank SMS is off unless you turn it on (Smart edition). Message text is never stored; only amount, payee and date."),
             "🧹" to ("You can erase it all" to "Settings → Delete everything wipes your data instantly. Uninstalling the app also removes it."),
         )
         items(points) { (emoji, tt) ->

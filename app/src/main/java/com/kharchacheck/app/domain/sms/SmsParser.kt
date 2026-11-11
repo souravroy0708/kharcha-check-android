@@ -9,10 +9,8 @@ import java.util.Locale
 /**
  * Reads Indian bank / card / UPI alert text and turns it into a draft entry. Pure Kotlin, no Android.
  *
- * Used for three inputs, all treated the same way:
- *  - incoming SMS (smart edition, only if the user turned it on)
- *  - the one-time inbox import (smart edition)
- *  - text the user shares or pastes into the app (both editions, no permission needed)
+ * Used only for text the user chooses to share or paste into the app (a bank message, a UPI receipt).
+ * The app has no SMS permission and never reads messages itself.
  *
  * Privacy: the message body is never stored. Only the parsed fields are kept, and every field stays editable.
  */

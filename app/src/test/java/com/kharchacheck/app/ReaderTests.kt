@@ -123,8 +123,10 @@ class StatementParserTest {
             05 Nov 2026 BY TRANSFER-NEFT/INTEREST PAID 99.00 11,399.00
         """.trimIndent().lines()
         val rows = StatementParser.fromLines(lines, nov).rows
-        assertEquals(listOf(true, false, false, true), rows.map { it.credit })
+        assertEquals(listOf(true, false, false), rows.take(3).map { it.credit })
         assertTrue(rows.take(3).all { it.sure })
+        // The oldest row has no earlier balance to check against, so its amount isn't guessed.
+        assertEquals(0L, rows[3].amountPaise); assertFalse(rows[3].sure)
         assertEquals("Blinkit", Classifier.classify(rows[1].description, false).payee)
     }
 

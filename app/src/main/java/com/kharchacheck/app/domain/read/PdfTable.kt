@@ -5,8 +5,11 @@ import java.time.YearMonth
 import java.util.Locale
 import kotlin.math.abs
 
-/** One character from the PDF with its position (PDF text-space, y grows downwards). */
-data class Glyph(val text: String, val x: Float, val width: Float, val y: Float, val height: Float, val page: Int)
+/**
+ * One character from the PDF with its position (PDF text-space, y grows downwards).
+ * [word] is the PDF library's own word number: characters with the same number were written as one word.
+ */
+data class Glyph(val text: String, val x: Float, val width: Float, val y: Float, val height: Float, val page: Int, val word: Int = -1)
 
 /** A word: glyphs that sit next to each other on the same line. */
 data class Word(val text: String, val x0: Float, val x1: Float, val y: Float, val height: Float, val page: Int) {
@@ -30,23 +33,41 @@ object PdfTable {
 
     // ---------------------------------------------------------------- glyphs → words → lines
 
+    /**
+     * Glyphs → words. Uses the PDF library's own word boundaries (robust to fonts that report zero or wrong
+     * character widths), and only splits *inside* a word where there's a clear jump in x, which is how two
+     * columns printed with no space between them ("340.0024,660.00") are separated.
+     */
     fun words(glyphs: List<Glyph>): List<Word> {
         val out = mutableListOf<Word>()
-        var cur = StringBuilder(); var x0 = 0f; var x1 = 0f; var y = 0f; var h = 0f; var page = -1
-        fun flush() { if (cur.isNotBlank()) out += Word(cur.toString().trim(), x0, x1, y, h, page); cur = StringBuilder() }
+        val groups = mutableListOf<MutableList<Glyph>>()
         for (g in glyphs) {
-            val space = g.text.isBlank()
-            val gap = g.x - x1
-            val sameLine = g.page == page && abs(g.y - y) < maxOf(h, g.height) * 0.5f
-            val charW = if (g.width > 0) g.width else g.height * 0.5f
-            if (space || !sameLine || cur.isEmpty() || gap > charW * 0.6f || gap < -charW * 2) {
-                flush()
-                if (space) { x1 = g.x + g.width; page = g.page; y = g.y; continue }
-                x0 = g.x; y = g.y; h = g.height; page = g.page
-            }
-            cur.append(g.text); x1 = g.x + g.width; h = maxOf(h, g.height)
+            if (g.text.isBlank()) { groups.add(mutableListOf()); continue }
+            val cur = groups.lastOrNull()
+            val prev = cur?.lastOrNull()
+            val sameWord = prev != null && prev.page == g.page && abs(prev.y - g.y) < maxOf(prev.height, g.height) * 0.5f &&
+                (if (g.word >= 0) g.word == prev.word else g.x - (prev.x + prev.width) < maxOf(prev.width, prev.height * 0.5f) * 0.6f)
+            if (sameWord) cur!!.add(g) else groups.add(mutableListOf(g))
         }
-        flush()
+        for (grp in groups) {
+            if (grp.isEmpty()) continue
+            // Typical advance between characters inside this word.
+            val deltas = grp.zipWithNext { a, b -> b.x - a.x }.filter { it > 0 }.sorted()
+            val median = if (deltas.isEmpty()) 0f else deltas[deltas.size / 2]
+            var piece = mutableListOf(grp.first())
+            fun flush() {
+                val t = piece.joinToString("") { it.text }.trim()
+                if (t.isNotEmpty()) out += Word(t, piece.first().x, piece.last().x + maxOf(piece.last().width, median), piece.first().y,
+                    piece.maxOf { it.height }, piece.first().page)
+            }
+            for (i in 1 until grp.size) {
+                val jump = grp[i].x - grp[i - 1].x
+                val big = median > 0 && jump > median * 2.6f && jump > grp[i].height * 0.9f
+                if (big) { flush(); piece = mutableListOf() }
+                piece.add(grp[i])
+            }
+            flush()
+        }
         return out
     }
 
@@ -78,14 +99,21 @@ object PdfTable {
         }
     }
 
-    /** Groups header words into labels ("Withdrawal Amt.", "Closing Balance") by horizontal closeness. */
+    /**
+     * Groups header words into column labels ("Withdrawal Amt.", "Closing Balance"). Works across lines:
+     * words stacked in the same column (a two-line header cell) overlap horizontally and join one label.
+     */
     private fun headerColumns(line: List<Word>): List<Col>? {
         val groups = mutableListOf<MutableList<Word>>()
-        for (w in line) {
+        for (w in line.sortedBy { it.x0 }) {
             val g = groups.lastOrNull()
-            if (g != null && w.x0 - g.last().x1 < w.height * 0.9f) g += w else groups += mutableListOf(w)
+            val gx1 = g?.maxOf { it.x1 } ?: Float.NEGATIVE_INFINITY
+            if (g != null && w.x0 - gx1 < w.height * 0.9f) g += w else groups += mutableListOf(w)
         }
-        val cols = groups.mapNotNull { g -> fieldOf(g.joinToString(" ") { it.text })?.let { Col(it, g.first().x0, g.last().x1) } }
+        val cols = groups.mapNotNull { g ->
+            val label = g.sortedWith(compareBy<Word>({ it.y }, { it.x0 })).joinToString(" ") { it.text }
+            fieldOf(label)?.let { Col(it, g.minOf { w -> w.x0 }, g.maxOf { w -> w.x1 }) }
+        }
         val fields = cols.map { it.field }.toSet()
         val hasDate = Field.DATE in fields
         val hasMoney = fields.any { it in setOf(Field.DEBIT, Field.CREDIT, Field.AMOUNT) }
@@ -119,10 +147,21 @@ object PdfTable {
         var inTable = false
         var openingBalance: Long? = null
 
-        for (line in allLines) {
+        var skip = 0
+        for ((li, line) in allLines.withIndex()) {
+            if (skip > 0) { skip--; continue }
             val text = line.joinToString(" ") { it.text }
-            val header = headerColumns(line)
-            if (header != null) { cols = header; inTable = true; open = null; continue }
+            // Header: this line, or this line merged with the next one or two (two-line header cells).
+            val header = (0..2).firstNotNullOfOrNull { extra ->
+                val window = allLines.subList(li, minOf(allLines.size, li + extra + 1))
+                val sameBlock = window.all { it.first().page == line.first().page && abs(it.first().y - line.first().y) <= line.first().height * 3f }
+                val noDates = window.none { l -> l.any { w -> w.text.any(Char::isDigit) && StatementParser.parseDateCell(w.text, hint) != null } }
+                // Every line of a multi-line header must itself contain a heading word (so a title line above isn't merged in).
+                val allHeadingLines = extra == 0 || window.all { l -> l.any { w -> fieldOf(w.text) != null } }
+                if (!sameBlock || !noDates || !allHeadingLines || window.size < extra + 1) null
+                else headerColumns(window.flatten())?.let { it to extra }
+            }
+            if (header != null) { cols = header.first; inTable = true; open = null; skip = header.second; continue }
             if (Regex("""opening balance""", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
                 line.mapNotNull { num(it.text) }.lastOrNull()?.let { openingBalance = it.paise }
                 continue
@@ -163,63 +202,93 @@ object PdfTable {
         }
         if (cols == null) return null
 
-        // Turn into rows; decide direction; then cross-check with the running balance.
-        data class R(val b: Building, val amount: Long, val credit: Boolean?, val balance: Long?)
-        val rs = built.mapNotNull { b ->
+        val rows = verifyWithBalance(built.mapNotNull { b ->
             val debit = b.values[Field.DEBIT]?.takeIf { it.paise > 0 }
             val credit = b.values[Field.CREDIT]?.takeIf { it.paise > 0 }
             val amount = b.values[Field.AMOUNT]?.takeIf { it.paise > 0 }
             val bal = b.values[Field.BALANCE]?.let { if (it.mark == "dr" || it.negative) -it.paise else it.paise }
-            when {
-                debit != null && credit == null -> R(b, debit.paise, false, bal)
-                credit != null && debit == null -> R(b, credit.paise, true, bal)
-                amount != null -> R(b, amount.paise, when { amount.mark == "cr" -> true; amount.mark == "dr" || amount.negative -> false; else -> null }, bal)
-                else -> null
+            val desc = b.desc.toString().replace(Regex("""\s+"""), " ").trim()
+            val (amt, dir, ambiguous) = when {
+                debit != null && credit != null -> Triple(0L, null, true)         // both columns filled: can't tell
+                debit != null -> Triple(debit.paise, false, false)
+                credit != null -> Triple(credit.paise, true, false)
+                amount != null -> Triple(amount.paise, when { amount.mark == "cr" -> true; amount.mark == "dr" || amount.negative -> false; else -> null }, false)
+                else -> Triple(0L, null, false)
             }
-        }
-        // Chronological or newest-first? Count which neighbour explains each balance change.
+            if (amt == 0L && bal == null && !ambiguous) return@mapNotNull null  // not a transaction row
+            Candidate(b.date, desc.take(200), amt, dir, bal, b.ref, fromColumn = !ambiguous && amt > 0)
+        }, openingBalance, creditCard, hasBalanceColumn = cols!!.any { it.field == Field.BALANCE })
+        return StatementParser.Result(rows, creditCard)
+    }
+
+    /** A row before verification: [amount] = 0 means "not found or ambiguous". */
+    data class Candidate(val date: LocalDate, val desc: String, val amount: Long, val credit: Boolean?, val balance: Long?, val ref: String, val fromColumn: Boolean)
+
+    /**
+     * The accuracy core. In a bank statement every row's amount must equal the change in the running balance.
+     *  - amount matches the balance change → confirmed (direction from the change)
+     *  - no amount, or it disagrees, but the balance chain is reliable overall → amount = balance change (confirmed)
+     *  - no balance to check against → keep the amount only if it came cleanly from a debit/credit/amount column;
+     *    card statements (no balance column) are trusted the same way
+     *  - otherwise → amount 0 and "not sure", so the user fills it in. A blank beats a wrong number.
+     */
+    fun verifyWithBalance(rs: List<Candidate>, opening: Long?, creditCard: Boolean, hasBalanceColumn: Boolean): List<StatementParser.Row> {
+        // Oldest-first or newest-first? Count which neighbour explains each balance change.
         var fwd = 0; var rev = 0
         for (i in 1 until rs.size) {
             val b0 = rs[i - 1].balance ?: continue; val b1 = rs[i].balance ?: continue
-            if (abs(abs(b1 - b0) - rs[i].amount) <= 1) fwd++
-            if (abs(abs(b1 - b0) - rs[i - 1].amount) <= 1) rev++
+            if (rs[i].amount > 0 && abs(abs(b1 - b0) - rs[i].amount) <= 1) fwd++
+            if (rs[i - 1].amount > 0 && abs(abs(b1 - b0) - rs[i - 1].amount) <= 1) rev++
         }
         val forward = fwd >= rev
-        val rows = rs.mapIndexed { i, r ->
-            val older: Long? = if (forward) (if (i == 0) openingBalance else rs[i - 1].balance) else rs.getOrNull(i + 1)?.balance
-            val byBalance = if (r.balance != null && older != null) when {
-                abs(older + r.amount - r.balance) <= 1 -> true
-                abs(older - r.amount - r.balance) <= 1 -> false
-                else -> null
-            } else null
-            val desc = r.b.desc.toString().replace(Regex("""\s+"""), " ").trim()
-            val credit = byBalance ?: r.credit ?: (creditCard && Regex("payment|refund|reversal|cashback", RegexOption.IGNORE_CASE).containsMatchIn(desc))
-            val sure = (byBalance != null && (r.credit == null || r.credit == byBalance)) || (r.balance == null && r.credit != null)
-            StatementParser.Row(r.b.date, desc.take(200), r.amount, credit, r.balance, sure, r.b.ref)
+        fun older(i: Int): Long? = if (forward) (if (i == 0) opening else rs[i - 1].balance) else rs.getOrNull(i + 1)?.balance ?: (if (i == rs.lastIndex) opening else null)
+        val withBalance = rs.indices.filter { rs[it].balance != null && older(it) != null && rs[it].amount > 0 }
+        val matched = withBalance.count { i -> abs(abs(rs[i].balance!! - older(i)!!) - rs[i].amount) <= 1 }
+        // The balance column is trustworthy if most rows that can be checked do check out.
+        val chainReliable = withBalance.size >= 3 && matched * 10 >= withBalance.size * 7
+
+        return rs.mapIndexed { i, r ->
+            val o = older(i)
+            val diff = if (r.balance != null && o != null) r.balance - o else null
+            fun row(amount: Long, credit: Boolean, sure: Boolean) = StatementParser.Row(r.date, r.desc, amount, credit, r.balance, sure, r.ref)
+            val cardCredit = Regex("payment|refund|reversal|cashback", RegexOption.IGNORE_CASE).containsMatchIn(r.desc)
+            when {
+                // 1. Amount agrees with the balance change: confirmed.
+                diff != null && r.amount > 0 && abs(abs(diff) - r.amount) <= 1 -> row(r.amount, diff > 0, true)
+                // 2. Amount missing or disagrees, but the balance chain is reliable: the change IS the amount.
+                diff != null && diff != 0L && chainReliable -> row(abs(diff), diff > 0, true)
+                // 3. Could be checked but doesn't add up: don't guess.
+                diff != null -> row(0L, r.credit ?: (diff > 0), false)
+                // 4. The statement has a balance column but this row has no balance: columns are probably off.
+                hasBalanceColumn && r.balance == null -> row(0L, r.credit ?: false, false)
+                // 5. Oldest row (nothing older to compare): trust the column only if the rest of the chain checks out.
+                r.balance != null && r.fromColumn -> row(r.amount, r.credit ?: false, chainReliable && r.credit != null)
+                // 6. No balance column at all (credit cards, amount-only statements): one clean amount per row.
+                !hasBalanceColumn && r.fromColumn -> row(r.amount, r.credit ?: (creditCard && cardCredit), r.credit != null || creditCard)
+                else -> row(0L, r.credit ?: false, false)
+            }
         }
-        return StatementParser.Result(rows, creditCard)
     }
 
     private val MONEY = setOf(Field.DEBIT, Field.CREDIT, Field.AMOUNT, Field.BALANCE)
 
     /**
-     * Which column a word belongs to. Each column "owns" the space up to the midpoint with its neighbours.
-     * Numbers landing in money territory snap to the money column whose right edge they align with,
-     * because bank statements right-align amounts under their headings.
+     * Which column a word belongs to.
+     *  - Numbers: the money column whose right edge they line up with (amounts are right-aligned under headings).
+     *  - Text: the column it starts in (headings and text are left-aligned), so long narrations that run
+     *    wide stay in the narration column.
      */
     private fun colOf(w: Word, cols: List<Col>): Field {
-        val sorted = cols.sortedBy { it.cx }
-        var owner = sorted.last()
-        for ((i, c) in sorted.withIndex()) {
-            val right = if (i == sorted.lastIndex) Float.POSITIVE_INFINITY else (c.cx + sorted[i + 1].cx) / 2
-            if (w.cx <= right) { owner = c; break }
-        }
-        if (owner.field !in MONEY) return owner.field
         val isNum = w.text.any(Char::isDigit) && num(w.text) != null
-        return when {
-            isNum -> cols.filter { it.field in MONEY }.minBy { minOf(abs(w.x1 - it.x1), abs(w.cx - it.cx)) }.field
-            w.text.length > 3 -> if (cols.any { it.field == Field.DESC }) Field.DESC else owner.field // long text drifting right
-            else -> owner.field // "Cr" / "Dr" marks stay with their amount
+        if (isNum) {
+            val m = cols.filter { it.field in MONEY }.minByOrNull { abs(w.x1 - it.x1) }
+            if (m != null && abs(w.x1 - m.x1) <= maxOf(w.height * 2.5f, 20f)) return m.field
         }
+        val owner = cols.filter { it.x0 <= w.x0 + w.height * 2f }.maxByOrNull { it.x0 } ?: cols.minBy { it.x0 }
+        if (owner.field in MONEY && !isNum) {
+            // "Cr"/"Dr" marks and stray decimal fragments stay with the amount; longer text is narration overflow.
+            return if (w.text.length <= 3) owner.field else (if (cols.any { it.field == Field.DESC }) Field.DESC else owner.field)
+        }
+        return owner.field
     }
 }

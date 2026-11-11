@@ -20,6 +20,11 @@ while IFS= read -r f; do
   rm -f "$REPO/$f"; echo "removed  ${f#./}"; removed=$((removed + 1))
 done < <(comm -23 "$TMP/old.txt" "$TMP/new.txt")
 
+# Files and folders removed from the project in newer versions (copying alone never deletes them).
+for old in app/src/smart app/src/standard; do
+  [ -e "$REPO/$old" ] && { echo "Removing obsolete $old"; rm -rf "$REPO/$old"; }
+done
+
 cp -a "$SRC/." "$REPO/"
 find "$REPO" -type d -empty -not -path "*/.git/*" -delete 2>/dev/null || true
 

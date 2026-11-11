@@ -25,6 +25,7 @@ import com.kharchacheck.app.domain.Gamification
 import com.kharchacheck.app.domain.MonthReport
 import com.kharchacheck.app.data.security.SecretBox
 import com.kharchacheck.app.domain.Bill
+import com.kharchacheck.app.domain.BudgetAlerts
 import com.kharchacheck.app.domain.Holding
 import com.kharchacheck.app.domain.HoldingKind
 import com.kharchacheck.app.domain.NetItem
@@ -37,7 +38,6 @@ import com.kharchacheck.app.domain.read.ReceiptParser
 import com.kharchacheck.app.domain.ReportEngine
 import com.kharchacheck.app.domain.sms.SmsParser
 import com.kharchacheck.app.export.ReportPdf
-import com.kharchacheck.app.sms.SmsSupport
 import com.kharchacheck.app.widget.KharchaWidget
 import com.kharchacheck.app.work.DailyWorker
 import com.kharchacheck.app.work.MorningTipWorker
@@ -207,7 +207,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun save(t: Txn, rememberPayeeRule: Boolean, repeatMonthly: Boolean = false, attachmentIds: List<Long> = emptyList(),
              split: SplitRequest? = null, hidden: Boolean? = null, after: () -> Unit = {}) = viewModelScope.launch {
+        val nudge = budgetNudge(t)   // computed from the snapshot before this entry is added
         val id = repo.saveTxn(t.copy(review = ReviewState.CONFIRMED))
+        nudge?.let { msg -> viewModelScope.launch { kotlinx.coroutines.delay(1_500); say(msg) } }  // after the "Added" message
         if (hidden != null) c.settings.setHidden(listOf(id), hidden)
         c.files.link(attachmentIds, id)
         if (split != null && split.names.isNotEmpty()) {
@@ -224,6 +226,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun restore(t: Txn) = viewModelScope.launch { repo.saveTxn(t) }
+
+    /** Warns when a new spend crosses 80% or 100% of its category budget, or of the monthly budget. */
+    private fun budgetNudge(t: Txn): String? {
+        val d = data.value ?: return null
+        if (t.id != 0L || t.type != TxType.EXPENSE || t.month != YearMonth.now()) return null
+        val cat = d.catMap[t.categoryId]?.takeIf { it.bucket.isSpend } ?: return null
+        d.budgets[cat.id]?.let { limit ->
+            val before = d.report.categories.firstOrNull { it.category.id == cat.id }?.paise ?: 0
+            BudgetAlerts.crossing(before, before + t.amountPaise, limit)?.let { return BudgetAlerts.message(cat.name, before + t.amountPaise, limit, it) }
+        }
+        val monthly = d.settings.monthlyBudgetPaise
+        val before = d.report.spendPaise
+        return BudgetAlerts.crossing(before, before + t.amountPaise, monthly)?.let { BudgetAlerts.message("monthly", before + t.amountPaise, monthly, it) }
+    }
 
     // ---- Bulk edit (Activity multi-select) ----
     fun deleteMany(list: List<Txn>) = viewModelScope.launch {
@@ -401,6 +417,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         c.settings.setAutoBackup(false, null); SecretBox(ctx, "backup").clear(); AutoBackupWorker.cancel(ctx)
         say("Automatic backup turned off")
     }
+    fun setBackupIncludeFiles(v: Boolean) = viewModelScope.launch { c.settings.setBackupIncludeFiles(v) }
     fun backupNow() { AutoBackupWorker.runNow(ctx); say("Backing up…") }
 
     // ---- Crash reports ----
@@ -459,12 +476,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         c.settings.setReminder(on, h, m); DailyWorker.schedule(ctx, h, m)
     }
     fun setAutoRead(on: Boolean) = viewModelScope.launch { c.settings.setAutoRead(on) }
-    fun setSmsCapture(on: Boolean) = viewModelScope.launch { c.settings.setSmsCapture(on) }
 
-    fun importSms(days: Int) = viewModelScope.launch {
-        val r = SmsSupport.importInbox(ctx, days)
-        say(if (r.added == 0) "No new bank transactions found in the last $days days" else "Found ${r.added} transactions. Review them in the inbox.")
-    }
 
     // ---- Files (all via the system file picker; nothing is uploaded) ----
     fun exportCsv(uri: Uri) = viewModelScope.launch {

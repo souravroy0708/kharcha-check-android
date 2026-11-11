@@ -79,12 +79,27 @@ class FileVault(private val context: Context) {
     fun delete(fileName: String) { File(dir, fileName).delete() }
     fun wipe() { dir.listFiles()?.forEach { it.delete() } }
 
-    private fun write(fileName: String, plain: ByteArray) {
+    // ---- Restore staging: files from a backup land here first and only replace the real vault once the
+    // whole backup has been read and applied, so a damaged backup can never wipe the current files.
+    private val staging = File(context.noBackupFilesDir, "vault_restore")
+    fun beginRestore() { staging.deleteRecursively(); staging.mkdirs() }
+    fun stage(fileName: String, plain: ByteArray) {
+        require(Regex("""[A-Za-z0-9._-]{1,80}""").matches(fileName)) { "Bad file name in backup" }
+        write(fileName, plain, staging)
+    }
+    fun commitRestore() {
+        wipe()
+        staging.listFiles()?.forEach { f -> val dest = File(dir, f.name); if (!f.renameTo(dest)) { f.copyTo(dest, overwrite = true); f.delete() } }
+        staging.deleteRecursively()
+    }
+    fun abortRestore() { staging.deleteRecursively() }
+
+    private fun write(fileName: String, plain: ByteArray, into: File = dir) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())
-        val tmp = File(dir, "$fileName.tmp")
+        val tmp = File(into, "$fileName.tmp")
         tmp.writeBytes(cipher.iv + cipher.doFinal(plain))
-        val dest = File(dir, fileName)
+        val dest = File(into, fileName)
         dest.delete()
         if (!tmp.renameTo(dest)) { tmp.delete(); error("Couldn't save the file") }
     }

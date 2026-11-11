@@ -30,22 +30,6 @@ android {
         manifestPlaceholders["appLabel"] = "@string/app_name"
     }
 
-    // Two editions from one codebase:
-    //  standard: no SMS permissions at all. Ship this first; Play approves it with no declaration.
-    //  smart:    adds optional, user-enabled SMS reading. Needs the Play "SMS-based money management"
-    //            permission declaration to be approved before you can publish it.
-    flavorDimensions += "capture"
-    productFlavors {
-        create("standard") {
-            dimension = "capture"
-            isDefault = true
-            buildConfigField("boolean", "SMS_CAPTURE", "false")
-        }
-        create("smart") {
-            dimension = "capture"
-            buildConfigField("boolean", "SMS_CAPTURE", "true")
-        }
-    }
 
     signingConfigs {
         create("release") {

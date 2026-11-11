@@ -74,10 +74,12 @@ data class Txn(
     val createdAt: Long = epochMillis,
     val updatedAt: Long = epochMillis,
 ) {
-    val zone: ZoneId get() = runCatching { ZoneId.of(zoneId) }.getOrDefault(ZoneId.systemDefault())
-    val date: LocalDate get() = Instant.ofEpochMilli(epochMillis).atZone(zone).toLocalDate()
-    val month: YearMonth get() = YearMonth.from(date)
-    val hour: Int get() = Instant.ofEpochMilli(epochMillis).atZone(zone).hour
+    // Computed once per entry, not on every read: reports and analytics read these millions of times.
+    val zone: ZoneId by lazy(LazyThreadSafetyMode.PUBLICATION) { runCatching { ZoneId.of(zoneId) }.getOrDefault(ZoneId.systemDefault()) }
+    private val local by lazy(LazyThreadSafetyMode.PUBLICATION) { Instant.ofEpochMilli(epochMillis).atZone(zone) }
+    val date: LocalDate by lazy(LazyThreadSafetyMode.PUBLICATION) { local.toLocalDate() }
+    val month: YearMonth by lazy(LazyThreadSafetyMode.PUBLICATION) { YearMonth.from(date) }
+    val hour: Int get() = local.hour
 }
 
 data class Goal(

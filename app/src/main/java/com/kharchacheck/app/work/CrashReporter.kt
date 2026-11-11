@@ -23,7 +23,7 @@ object CrashReporter {
             runCatching {
                 val sw = StringWriter(); error.printStackTrace(PrintWriter(sw))
                 File(app.filesDir, FILE).writeText(
-                    "Kharcha Check ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}, ${BuildConfig.FLAVOR})\n" +
+                    "Kharcha Check ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})\n" +
                         "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) · ${Build.MANUFACTURER} ${Build.MODEL}\n" +
                         "Time: ${ZonedDateTime.now()}\nThread: ${thread.name}\n\n" + sw.toString().take(12_000)
                 )
