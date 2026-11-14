@@ -146,7 +146,7 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
 
         item {
             Pad {
-                KcCard(title = "🎯 Savings goals", trailing = { TextButton(onClick = { newGoal = true }) { Text("+ New") } }) {
+                KcCard(title = "🎯 Savings goals", trailing = { TextButton(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.GoalsRoute) }) { Text("Plan ›") } }) {
                     if (data.goals.isEmpty()) Text("Give your money a job: emergency fund, a trip, a bike, a gift. Every rupee you add is logged as Save & Invest.",
                         style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
                     data.goals.forEach { goal ->

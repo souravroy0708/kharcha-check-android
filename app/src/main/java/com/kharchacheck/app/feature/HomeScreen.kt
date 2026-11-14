@@ -186,6 +186,34 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
 
+        // Goal SIPs this month (only when goals have plans)
+        val planned = data.goals.filter { !it.archived && !it.done && it.id in data.settings.goalPlans }
+        if (planned.isNotEmpty()) item {
+            val ym = java.time.YearMonth.now()
+            val status = planned.map { g ->
+                val p = data.settings.goalPlans.getValue(g.id)
+                val m = com.kharchacheck.app.domain.GoalPlanner.plan(p, g.savedPaise)
+                val need = if (p.stepUp) m.sipStepUpStartPaise else m.sipFlatPaise
+                val done = data.txns.filter { it.goalId == g.id && it.month == ym }.sumOf { it.amountPaise }
+                Triple(g, need, done)
+            }
+            val doneCount = status.count { (_, need, done) -> done >= need }
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.GoalsRoute) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🎯", fontSize = 26.sp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Goal SIPs this month: $doneCount of ${status.size} done", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                            val next = status.firstOrNull { (_, need, done) -> done < need }
+                            Text(next?.let { (g, need, done) -> "Next: ${g.emoji} ${g.name}, ${Money.format(need - done)} to go" } ?: "All goals funded this month 🎉",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
+
         // Money tools: bills due within a week and money people owe you.
         val upcomingBills = Bills.upcoming(billsList, LocalDate.now(), 7)
         if (upcomingBills.isNotEmpty()) item {

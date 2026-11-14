@@ -88,6 +88,7 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                     .put("nospend", JSONArray(s.noSpendDays.toList())).put("celebrated", JSONArray(s.celebratedBadges.toList()))
                     .put("practiced", JSONArray(s.practicedTipDays.toList())).put("planDone", JSONArray(s.planDone.toList()))
                     .put("hidden", JSONArray(s.hiddenIds.toList()))
+                    .put("goalPlans", com.kharchacheck.app.data.repo.GoalPlansJson.encode(s.goalPlans))
                     .put("dependents", s.dependents).put("risk", s.risk).put("emergencySaved", s.emergencySavedPaise)
             })
         // KCB3: a ZIP streamed through chunked encryption. Files first (one at a time, never all in memory),
@@ -198,6 +199,7 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                 challengesWon = s.optInt("won"), noSpendDays = longs(s.optJSONArray("nospend")), celebratedBadges = strs(s.optJSONArray("celebrated")),
                 practicedTipDays = longs(s.optJSONArray("practiced")), planDone = strs(s.optJSONArray("planDone")),
                 hiddenIds = longs(s.optJSONArray("hidden")),
+                goalPlans = com.kharchacheck.app.data.repo.GoalPlansJson.decode(s.optString("goalPlans").ifBlank { null }),
                 dependents = s.optBoolean("dependents"), risk = s.optString("risk", "BALANCED"), emergencySavedPaise = s.optLong("emergencySaved"),
             ))
         }

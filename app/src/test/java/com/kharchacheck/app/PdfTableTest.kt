@@ -185,3 +185,19 @@ class PdfAccuracyTest {
         assertTrue(rows.all { it.sure })
     }
 }
+
+class DiagnosticsTest {
+    @Test fun maskHidesNamesAndIdsButKeepsAmountsAndLayout() {
+        assertEquals("UPI/999999999999/xxxxxx", PdfTable.mask("UPI/630518920112/SWIGGY"))
+        assertEquals("24,660.00", PdfTable.mask("24,660.00"))
+        assertEquals("Withdrawal", PdfTable.mask("Withdrawal"))
+        assertEquals("01/11/26", PdfTable.mask("01/11/26"))
+        assertEquals("xxxxxx", PdfTable.mask("SOURAV"))
+        val p = Page()
+        p.row { left("Date", 20f); left("Narration", 80f); right("Withdrawal Amt.", 520f); right("Closing Balance", 710f) }
+        p.row { left("01/11/26", 20f); left("UPI-SOURAV-ROY", 80f); right("340.00", 520f); right("24,660.00", 710f) }
+        val report = PdfTable.diagnose(p.glyphs, YearMonth.of(2026, 11), false)
+        assertTrue(report.contains("340.00") && report.contains("Withdrawal"))
+        assertFalse(report.contains("SOURAV") || report.contains("ROY"))
+    }
+}

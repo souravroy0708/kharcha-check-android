@@ -35,6 +35,10 @@ import kotlin.coroutines.coroutineContext
  */
 class AutoReader(private val context: Context, private val ocr: OcrEngine) {
 
+    /** Privacy-masked description of the last statement read (layout + amounts, names hidden), for "Send reading report". */
+    @Volatile var lastReport: String? = null
+        private set
+
     sealed interface Outcome {
         data class Rows(val result: StatementParser.Result) : Outcome
         data class NeedsPassword(val wrong: Boolean) : Outcome
@@ -126,6 +130,10 @@ class AutoReader(private val context: Context, private val ocr: OcrEngine) {
             }
             val cardHint = card.takeIf { it }
             val table = withContext(Dispatchers.Default) { PdfTable.parse(stripper.glyphs, month, card) }
+            lastReport = runCatching {
+                "pages read: $total, scanned pages read with OCR: $ocrPages\n" +
+                    PdfTable.diagnose(stripper.glyphs, month, card)
+            }.getOrNull()
             val rows = if (table != null && table.rows.isNotEmpty()) {
                 table.rows + if (scannedLines.isNotEmpty()) StatementParser.fromLines(scannedLines, month, cardHint).rows else emptyList()
             } else StatementParser.fromLines(textLines + scannedLines, month, cardHint).rows

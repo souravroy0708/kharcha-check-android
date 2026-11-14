@@ -15,7 +15,7 @@ object Classifier {
         val name = brandName ?: payee
         return when {
             Regex("""\b(atm|cash wdl|cash withdrawal|nwd|awd)\b""").containsMatchIn(d) && !isCredit -> Result(TxType.TRANSFER, "atm_cash", "ATM withdrawal")
-            Regex("""(credit card|cc payment|card payment|bbps.*card|cred club|payment received|thank you for your payment)""").containsMatchIn(d) &&
+            Regex("""(credit card|cc payment|card payment|cc ?bill ?pay|cc bill|billpay.{0,12}cc|bbps.*card|cred club|payment received|thank you for your payment)""").containsMatchIn(d) &&
                 (creditCard == isCredit) -> Result(TxType.TRANSFER, "cc_bill", if (creditCard) "Card bill payment" else name)
             Regex("""(self transfer|own a/?c|to self\b|sweep)""").containsMatchIn(d) -> Result(TxType.TRANSFER, "self_transfer", name)
             isCredit && Regex("""(refund|reversal|reversed|cashback|chargeback)""").containsMatchIn(d) -> Result(TxType.INCOME, "refund", name)
@@ -50,7 +50,15 @@ object Narration {
         return title(pick.replace(Regex("""\s+"""), " ").take(32))
     }
 
-    fun title(s: String) = s.split(' ').filter { it.isNotBlank() }.joinToString(" ") { w ->
-        if (w.length <= 3 && w.all { it.isUpperCase() || it.isDigit() }) w else w.lowercase(Locale.ENGLISH).replaceFirstChar { it.titlecase(Locale.ENGLISH) }
+    /** "BHUKYA DEV" → "Bhukya Dev"; in mixed text keeps short acronyms ("SBI Card", "ATM"); keeps "B2". */
+    fun title(s: String): String {
+        val allCaps = s.none { it.isLowerCase() }
+        return s.split(' ').filter { it.isNotBlank() }.joinToString(" ") { w ->
+            when {
+                w.any(Char::isDigit) -> w
+                !allCaps && w.length <= 3 && w.all { it.isUpperCase() } -> w
+                else -> w.lowercase(Locale.ENGLISH).replaceFirstChar { it.titlecase(Locale.ENGLISH) }
+            }
+        }
     }
 }

@@ -14,7 +14,7 @@ Ship what exists, make it trustworthy, and let real users tell you what to build
 | Security | SQLCipher DB + Keystore-wrapped key; encrypted file vault; FLAG_SECURE; app lock; no SMS / location / contacts / ad ID, enforced by CI. |
 | Statement accuracy | Column-aware PDF reading, every amount verified against the running balance, **unconfirmed → 0, never guessed**. |
 | Data safety | Count-based dedupe, undo on every destructive action, password backups, auto-backup. |
-| Tests | 87 unit tests on the logic that decides money values, plus backup-format round trips. |
+| Tests | 94 unit tests on the logic that decides money values, including a faithful ICICI statement replica and goal-planning maths. |
 
 ## Findings
 

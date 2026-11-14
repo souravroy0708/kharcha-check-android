@@ -148,6 +148,11 @@ object PdfTable {
         var openingBalance: Long? = null
 
         var skip = 0
+        var pending = ""   // description text that belongs to the NEXT row (e.g. ICICI's bold payee name above the date line)
+        fun isDateLine(l: List<Word>, c: List<Col>): Boolean {
+            val dt = l.filter { colOf(it, c) == Field.DATE }.joinToString(" ") { it.text }
+            return dt.isNotBlank() && StatementParser.parseDateCell(dt, hint) != null
+        }
         for ((li, line) in allLines.withIndex()) {
             if (skip > 0) { skip--; continue }
             val text = line.joinToString(" ") { it.text }
@@ -161,7 +166,7 @@ object PdfTable {
                 if (!sameBlock || !noDates || !allHeadingLines || window.size < extra + 1) null
                 else headerColumns(window.flatten())?.let { it to extra }
             }
-            if (header != null) { cols = header.first; inTable = true; open = null; skip = header.second; continue }
+            if (header != null) { cols = header.first; inTable = true; open = null; pending = ""; skip = header.second; continue }
             if (Regex("""opening balance""", RegexOption.IGNORE_CASE).containsMatchIn(text)) {
                 line.mapNotNull { num(it.text) }.lastOrNull()?.let { openingBalance = it.paise }
                 continue
@@ -189,9 +194,24 @@ object PdfTable {
             val ref = byField[Field.REF].orEmpty().joinToString("") { it.text }.filter { it.isLetterOrDigit() }
 
             if (date != null) {
-                val b = Building(date, StringBuilder(desc), values, ref, line.first().y, line.first().page)
+                // "NAME | narration…" so the payee is clearly separated from the UPI details that follow.
+                val first = when {
+                    pending.isNotBlank() && desc.isNotBlank() -> "$pending | $desc"
+                    pending.isNotBlank() -> "$pending |"
+                    else -> desc
+                }
+                pending = ""
+                val b = Building(date, StringBuilder(first), values, ref, line.first().y, line.first().page)
                 built += b; open = b
             } else {
+                // Peek: is this line hugging the next row's date line rather than continuing the current row?
+                val next = allLines.getOrNull(li + 1)
+                val prev = allLines.getOrNull(li - 1)
+                if (next != null && next.first().page == line.first().page && values.isEmpty() && desc.isNotBlank() && isDateLine(next, c)) {
+                    val gapNext = next.first().y - line.first().y
+                    val gapPrev = if (prev != null && prev.first().page == line.first().page) line.first().y - prev.first().y else Float.MAX_VALUE
+                    if (gapNext < gapPrev * 0.8f) { pending = listOf(pending, desc).filter { it.isNotBlank() }.joinToString(" "); continue }
+                }
                 val o = open ?: continue
                 val near = line.first().page != o.page || abs(line.first().y - o.lastY) < line.first().height * 6
                 if (!near) continue
@@ -207,7 +227,7 @@ object PdfTable {
             val credit = b.values[Field.CREDIT]?.takeIf { it.paise > 0 }
             val amount = b.values[Field.AMOUNT]?.takeIf { it.paise > 0 }
             val bal = b.values[Field.BALANCE]?.let { if (it.mark == "dr" || it.negative) -it.paise else it.paise }
-            val desc = b.desc.toString().replace(Regex("""\s+"""), " ").trim()
+            val desc = b.desc.toString().replace(Regex("""\s+"""), " ").trim().trimEnd('|').trim()
             val (amt, dir, ambiguous) = when {
                 debit != null && credit != null -> Triple(0L, null, true)         // both columns filled: can't tell
                 debit != null -> Triple(debit.paise, false, false)
@@ -273,10 +293,12 @@ object PdfTable {
     private val MONEY = setOf(Field.DEBIT, Field.CREDIT, Field.AMOUNT, Field.BALANCE)
 
     /**
-     * Which column a word belongs to.
-     *  - Numbers: the money column whose right edge they line up with (amounts are right-aligned under headings).
-     *  - Text: the column it starts in (headings and text are left-aligned), so long narrations that run
-     *    wide stay in the narration column.
+     * Which column a word belongs to. Works whether headings are left-aligned, right-aligned or centred
+     * (ICICI centres "Transaction Remarks" over a wide column):
+     *  - numbers snap to the money column whose right edge they line up with (amounts are right-aligned)
+     *  - a word overlapping a heading's span belongs to that column
+     *  - a word in a gap between headings belongs to the description column (if the table has one),
+     *    unless it is right of the first money column; words left of every heading go to the first column
      */
     private fun colOf(w: Word, cols: List<Col>): Field {
         val isNum = w.text.any(Char::isDigit) && num(w.text) != null
@@ -284,11 +306,64 @@ object PdfTable {
             val m = cols.filter { it.field in MONEY }.minByOrNull { abs(w.x1 - it.x1) }
             if (m != null && abs(w.x1 - m.x1) <= maxOf(w.height * 2.5f, 20f)) return m.field
         }
-        val owner = cols.filter { it.x0 <= w.x0 + w.height * 2f }.maxByOrNull { it.x0 } ?: cols.minBy { it.x0 }
-        if (owner.field in MONEY && !isNum) {
-            // "Cr"/"Dr" marks and stray decimal fragments stay with the amount; longer text is narration overflow.
-            return if (w.text.length <= 3) owner.field else (if (cols.any { it.field == Field.DESC }) Field.DESC else owner.field)
+        val tol = w.height * 0.5f
+        val over = cols.filter { w.x1 > it.x0 - tol && w.x0 < it.x1 + tol }
+            .maxByOrNull { minOf(w.x1, it.x1) - maxOf(w.x0, it.x0) }
+        if (over != null) {
+            if (over.field in MONEY && !isNum && w.text.length > 3 && cols.any { it.field == Field.DESC }) return Field.DESC
+            return over.field
         }
-        return owner.field
+        val first = cols.minBy { it.x0 }
+        if (w.x1 <= first.x0) return first.field
+        val firstMoney = cols.filter { it.field in MONEY }.minOfOrNull { it.x0 }
+        if (cols.any { it.field == Field.DESC } && (firstMoney == null || w.x1 <= firstMoney + tol)) return Field.DESC
+        return cols.minBy { c -> if (w.x1 < c.x0) c.x0 - w.x1 else if (w.x0 > c.x1) w.x0 - c.x1 else 0f }.field
+    }
+
+    // ---------------------------------------------------------------- diagnostics
+
+    private val SAFE_WORDS = setOf("upi", "neft", "imps", "rtgs", "nach", "ach", "atm", "pos", "cr", "dr", "by", "to", "transfer", "wdl",
+        "opening", "closing", "balance", "total", "page", "of", "date", "value", "dt", "amt", "amount", "withdrawal", "deposit", "debit",
+        "credit", "narration", "description", "particulars", "ref", "no", "chq", "cheque", "inr", "rs", "txn", "tran", "salary", "payment", "card", "interest")
+
+    /** Hides names and identifiers but keeps layout, dates, amounts and structural words. */
+    fun mask(text: String): String {
+        val lower = text.lowercase(Locale.ENGLISH)
+        if (fieldOf(text) != null || lower.trim('.', ':', '-', '/') in SAFE_WORDS) return text
+        if (num(text) != null && text.contains('.')) return text                    // amounts / balances stay
+        if (StatementParser.parseDateCell(text, YearMonth.now()) != null) return text  // dates stay
+        return text.split(Regex("""(?<=[/\-@*])|(?=[/\-@*])""")).joinToString("") { part ->
+            when {
+                part.lowercase(Locale.ENGLISH) in SAFE_WORDS -> part
+                part.count(Char::isDigit) >= 5 -> part.replace(Regex("""\d"""), "9")  // account / reference numbers
+                else -> part.replace(Regex("""[A-Za-z]"""), "x")
+            }
+        }
+    }
+
+    /**
+     * A privacy-masked picture of what the reader saw: words with x-positions per line (first [maxPages]
+     * pages), detected header columns, and the parsed rows. Lets layout problems be fixed without the PDF.
+     */
+    fun diagnose(glyphs: List<Glyph>, hint: YearMonth, creditCard: Boolean, maxPages: Int = 2): String = buildString {
+        val ls = lines(words(glyphs))
+        appendLine("== Kharcha Check reading report ==")
+        appendLine("pages with text: ${glyphs.map { it.page }.distinct().size}, glyphs: ${glyphs.size}, lines: ${ls.size}, card: $creditCard")
+        appendLine("glyph widths: zero=${glyphs.count { it.width == 0f && it.text.isNotBlank() }}, word ids present=${glyphs.any { it.word >= 0 }}")
+        appendLine()
+        appendLine("-- lines (page | y | [x0-x1] word ...) --")
+        ls.filter { it.first().page < maxPages }.forEach { l ->
+            append("p${l.first().page} y=${"%.0f".format(l.first().y)} | ")
+            appendLine(l.joinToString("  ") { w -> "[${"%.0f".format(w.x0)}-${"%.0f".format(w.x1)}]${mask(w.text)}" })
+        }
+        appendLine()
+        val res = parse(glyphs, hint, creditCard)
+        if (res == null) appendLine("-- NO TABLE HEADER FOUND (text fallback would be used) --")
+        else {
+            appendLine("-- parsed rows: ${res.rows.size} (sure ${res.rows.count { it.sure }}, zero ${res.rows.count { it.amountPaise == 0L }}) --")
+            res.rows.take(40).forEach { r ->
+                appendLine("${r.date} amt=${"%d.%02d".format(r.amountPaise / 100, r.amountPaise % 100)} ${if (r.credit) "CR" else "DR"} sure=${r.sure} bal=${r.balancePaise?.let { "%d.%02d".format(it / 100, it % 100) } ?: "-"} | ${mask(r.description).take(40)}")
+            }
+        }
     }
 }

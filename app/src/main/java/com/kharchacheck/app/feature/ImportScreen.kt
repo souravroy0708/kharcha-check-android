@@ -199,6 +199,8 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
         onDone(ids)
     }
 
+    fun readingReport(): String? = c.reader.lastReport
+
     override fun onCleared() { job?.cancel() }
 }
 
@@ -214,6 +216,8 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController, route: ImportRoute) {
     val phase by ivm.phase.collectAsStateWithLifecycle()
     var picking by remember { mutableStateOf<ImportItem?>(null) }
     var editing by remember { mutableStateOf<ImportItem?>(null) }
+    var reportAsk by remember { mutableStateOf(false) }
+    val platform = com.kharchacheck.app.ui.LocalPlatform.current
 
     LaunchedEffect(a?.id) { if (a != null) ivm.start(a, data) }
 
@@ -238,9 +242,12 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController, route: ImportRoute) {
             is ImportPhase.Failed -> {
                 if (a != null) KindSwitch(a) { k -> vm.setStatementKind(a, k); ivm.restart(a.copy(kind = k), data) }
                 EmptyState("🧐", "Couldn't read this one", p.message, "Back") { nav.popBackStack() }
+                if (a?.isPdf == true) TextButton(onClick = { reportAsk = true }, modifier = Modifier.padding(horizontal = 16.dp)) { Text("Send a reading report so this bank can be supported") }
             }
             is ImportPhase.Review -> {
                 if (a != null) KindSwitch(a) { k -> vm.setStatementKind(a, k); ivm.restart(a.copy(kind = k), data) }
+                if (a?.isPdf == true) Text("Amounts look wrong? Send a reading report", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).clickable { reportAsk = true })
                 Review(p, data, ivm, onPick = { picking = it }, onEdit = { editing = it }) { ids, drafts ->
                     if (ids.isEmpty()) vm.say("Nothing added")
                     else vm.confirmImported(ids, if (drafts) "${ids.size} drafts added to Review" else "Added ${ids.size} entries from your statement ✓")
@@ -250,6 +257,19 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController, route: ImportRoute) {
         }
     }
 
+    if (reportAsk) AlertDialog(
+        onDismissRequest = { reportAsk = false },
+        title = { Text("Send a reading report?") },
+        text = { Text("Creates a small text file showing how the app read this statement's layout: where each word and amount sits, the columns it found, and the amounts it chose. " +
+            "Names and account / reference numbers are replaced with x and 9. Dates and amounts are kept, because they're needed to fix the reader. You can open the file and check it before sending.") },
+        confirmButton = { TextButton(onClick = {
+            reportAsk = false
+            val r = ivm.readingReport()
+            if (r == null) vm.say("Read the statement first, then send the report.")
+            else platform.shareFile(r.toByteArray(Charsets.UTF_8), "text/plain", "kharcha-reading-report.txt")
+        }) { Text("Create report") } },
+        dismissButton = { TextButton(onClick = { reportAsk = false }) { Text("Cancel") } },
+    )
     editing?.let { item -> RowEditDialog(item, onDismiss = { editing = null }) { payee, amt, date, note -> ivm.edit(item.key, payee, amt, date, note); editing = null } }
     picking?.let { item ->
         CategorySheet(data.activeCategories, item.txn.categoryId,

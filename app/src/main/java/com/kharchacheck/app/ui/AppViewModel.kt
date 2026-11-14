@@ -364,7 +364,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun archiveCategory(cat: Category, moveTo: Long?) = viewModelScope.launch { repo.archiveCategory(cat, moveTo); say("${cat.name} hidden") }
     fun setCategoryBudget(id: Long, paise: Long) = viewModelScope.launch { repo.setCategoryBudget(id, paise) }
     fun saveGoal(g: Goal) = viewModelScope.launch { repo.saveGoal(g) }
-    fun deleteGoal(id: Long) = viewModelScope.launch { repo.deleteGoal(id) }
+    fun deleteGoal(id: Long) = viewModelScope.launch { repo.deleteGoal(id); c.settings.deleteGoalPlan(id) }
+
+    /** Creates or updates a goal together with its plan (target = inflation-adjusted future cost). */
+    fun savePlannedGoal(g: Goal, plan: com.kharchacheck.app.domain.GoalPlan) = viewModelScope.launch {
+        val id = repo.saveGoal(g)
+        c.settings.saveGoalPlan(plan.copy(goalId = id))
+        say("${g.emoji} ${g.name} planned ✓")
+    }
 
     /** Adding money to a goal also logs it as a Save & Invest entry, so reports stay truthful. */
     fun addToGoal(g: Goal, paise: Long) = viewModelScope.launch {

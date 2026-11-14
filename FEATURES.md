@@ -42,3 +42,4 @@
 | Hidden entries (biometric unlock), mask amounts | `ui/AppViewModel.kt` (`derive`), `feature/HiddenScreen.kt`, `feature/HomeScreen.kt`, `MainActivity.kt` (`onStop`) |
 | Import history with batch delete | `feature/StatementsScreen.kt`, `ui/AppViewModel.kt` (`deleteImportBatch`) |
 | Balance-verified statement amounts (unsure → 0, never guessed) | `domain/read/PdfTable.kt` (`verifyWithBalance`), `feature/ImportScreen.kt` |
+| Goal planner: inflation-adjusted SIPs, leak swap, rescued money, SIP reminders | `domain/GoalPlanner.kt`, `feature/GoalsScreen.kt`, `work/DailyWorker.kt`, `data/repo/SettingsRepository.kt` (`GoalPlansJson`) |

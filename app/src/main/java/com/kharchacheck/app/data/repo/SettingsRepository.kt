@@ -62,6 +62,8 @@ data class Settings(
     val budgetAlertsSent: Set<String> = emptySet(),
     /** Put statements, receipts and the profile photo inside backups (bigger files, nothing lost on a new phone). */
     val backupIncludeFiles: Boolean = true,
+    /** Goal plans (template, today's cost, timeline, reminder day), keyed by goal id. */
+    val goalPlans: Map<Long, com.kharchacheck.app.domain.GoalPlan> = emptyMap(),
 )
 
 private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -106,6 +108,7 @@ class SettingsRepository(private val context: Context) {
         val mask = booleanPreferencesKey("mask_amounts")
         val budgetAlerts = stringSetPreferencesKey("budget_alerts")
         val backupFiles = booleanPreferencesKey("backup_files")
+        val goalPlans = stringPreferencesKey("goal_plans")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -146,6 +149,7 @@ class SettingsRepository(private val context: Context) {
             maskAmounts = p[K.mask] ?: false,
             budgetAlertsSent = p[K.budgetAlerts].orEmpty(),
             backupIncludeFiles = p[K.backupFiles] ?: true,
+            goalPlans = GoalPlansJson.decode(p[K.goalPlans]),
         )
     }
 
@@ -189,6 +193,11 @@ class SettingsRepository(private val context: Context) {
     suspend fun markBudgetAlerts(keys: Set<String>, month: String) = context.store.edit {
         it[K.budgetAlerts] = (it[K.budgetAlerts].orEmpty() + keys).filter { k -> k.startsWith("$month|") }.toSet()
     }
+    suspend fun saveGoalPlan(plan: com.kharchacheck.app.domain.GoalPlan) = context.store.edit {
+        it[K.goalPlans] = GoalPlansJson.encode(GoalPlansJson.decode(it[K.goalPlans]) + (plan.goalId to plan))
+    }
+    suspend fun deleteGoalPlan(goalId: Long) = context.store.edit { it[K.goalPlans] = GoalPlansJson.encode(GoalPlansJson.decode(it[K.goalPlans]) - goalId) }
+    suspend fun setGoalPlans(all: Map<Long, com.kharchacheck.app.domain.GoalPlan>) = context.store.edit { it[K.goalPlans] = GoalPlansJson.encode(all) }
     suspend fun setBackupIncludeFiles(v: Boolean) = context.store.edit { it[K.backupFiles] = v }
     suspend fun setMaskAmounts(v: Boolean) = context.store.edit { it[K.mask] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
@@ -213,6 +222,7 @@ class SettingsRepository(private val context: Context) {
         it[K.practiced] = s.practicedTipDays.map(Long::toString).toSet(); it[K.planDone] = s.planDone
         it[K.dependents] = s.dependents; it[K.risk] = s.risk; it[K.emergencySaved] = s.emergencySavedPaise
         it[K.hidden] = s.hiddenIds.map(Long::toString).toSet()
+        it[K.goalPlans] = GoalPlansJson.encode(s.goalPlans)
     }
 
     suspend fun ensureWisdomSeed() = context.store.edit {
@@ -220,4 +230,21 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun clearAll() = context.store.edit { it.clear() }
+}
+
+/** Goal plans as compact JSON inside one preference (no database migration needed). */
+object GoalPlansJson {
+    fun encode(m: Map<Long, com.kharchacheck.app.domain.GoalPlan>): String = org.json.JSONArray(m.values.map { p ->
+        org.json.JSONObject().put("id", p.goalId).put("kind", p.kind.name).put("cost", p.todayCostPaise).put("years", p.years)
+            .put("infl", p.inflationPct).put("step", p.stepUp).put("day", p.sipDay).put("age", p.childAge ?: -1)
+    }).toString()
+
+    fun decode(s: String?): Map<Long, com.kharchacheck.app.domain.GoalPlan> = runCatching {
+        val a = org.json.JSONArray(s ?: return emptyMap())
+        (0 until a.length()).map { a.getJSONObject(it) }.associate { o ->
+            val kind = runCatching { com.kharchacheck.app.domain.GoalKind.valueOf(o.getString("kind")) }.getOrDefault(com.kharchacheck.app.domain.GoalKind.CUSTOM)
+            o.getLong("id") to com.kharchacheck.app.domain.GoalPlan(o.getLong("id"), kind, o.getLong("cost"), o.getInt("years"), o.optDouble("infl", kind.inflationPct),
+                o.optBoolean("step", true), o.optInt("day", 5), o.optInt("age", -1).takeIf { it >= 0 })
+        }
+    }.getOrDefault(emptyMap())
 }

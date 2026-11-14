@@ -26,3 +26,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class GuideRoute(val tab: Int = 0)
 @Serializable object ExportRoute
 @Serializable object HiddenRoute
+@Serializable object GoalsRoute

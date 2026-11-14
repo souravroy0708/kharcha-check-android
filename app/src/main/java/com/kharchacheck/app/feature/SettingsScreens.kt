@@ -147,6 +147,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 val dues = vm.dues.collectAsStateWithLifecycle().value
                 val bills = vm.bills.collectAsStateWithLifecycle().value
                 SettingRow("📘 Smart Money Guide", "Salary plan, investing best practices, online spending traps") { nav.navigate(com.kharchacheck.app.ui.nav.GuideRoute()) }
+                SettingRow("🎯 Goals & plans", "Home, child's education, retirement: monthly SIP with inflation") { nav.navigate(com.kharchacheck.app.ui.nav.GoalsRoute) }
                 SettingRow("💼 Wealth & net worth", "Mutual funds with daily prices, FDs, PPF, bank balances, loans") { nav.navigate(WealthRoute) }
                 SettingRow("🤝 Split & dues", "Who owes you, who you owe, one-tap reminders", com.kharchacheck.app.domain.Dues.toCollect(dues).takeIf { it > 0 }?.let { Money.compact(it) }) { nav.navigate(DuesRoute) }
                 SettingRow("🧾 Bills & due dates", "Card, rent, electricity, insurance reminders", "${bills.size}") { nav.navigate(BillsRoute) }

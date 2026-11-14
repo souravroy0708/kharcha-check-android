@@ -71,6 +71,22 @@ class DailyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
             }
         }
 
+        // Goal SIP reminders: on each goal's chosen day, if this month's contribution isn't done yet.
+        run {
+            val goals = c.finance.goals.first().filter { !it.archived && !it.done }
+            goals.forEach { g ->
+                val plan = s.goalPlans[g.id] ?: return@forEach
+                if (plan.sipDay == 0 || plan.sipDay.coerceAtMost(today.lengthOfMonth()) != today.dayOfMonth) return@forEach
+                val math = com.kharchacheck.app.domain.GoalPlanner.plan(plan, g.savedPaise)
+                val need = if (plan.stepUp) math.sipStepUpStartPaise else math.sipFlatPaise
+                val doneThisMonth = txns.filter { it.goalId == g.id && it.month == YearMonth.from(today) }.sumOf { it.amountPaise }
+                if (need > 0 && doneThisMonth < need) Notifier.post(applicationContext, 2500 + (g.id % 50).toInt(), Notifier.CH_REMINDERS,
+                    "${g.emoji} Invest ${Money.format(need - doneThisMonth)} for ${g.name}",
+                    "Your monthly step towards ${g.name}. Invest it, then tap \"Add money\" on the goal so your progress stays right.", "goals",
+                    publicTitle = "Goal reminder")
+            }
+        }
+
         // Bill reminders: N days before, the day before, on the day, and once when a day late.
         com.kharchacheck.app.domain.Bills.remindToday(c.tools.bills(), today).forEachIndexed { i, b ->
             val amount = if (b.bill.amountPaise > 0) " (${Money.format(b.bill.amountPaise)})" else ""
