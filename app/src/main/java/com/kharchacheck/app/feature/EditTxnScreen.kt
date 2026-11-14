@@ -529,7 +529,7 @@ private fun applyReceipt(st: EditTxnState, r: ReceiptParser.Result?, d: AppData)
     return "✨ Filled ${filled.joinToString(", ")} from the screenshot.$check$pending"
 }
 
-fun ordinal(n: Int): String = n.toString() + when {
+private fun ordinal(n: Int): String = n.toString() + when {
     n % 100 in 11..13 -> "th"
     n % 10 == 1 -> "st"
     n % 10 == 2 -> "nd"
