@@ -77,6 +77,14 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+private fun ordinal(n: Int): String = n.toString() + when {
+    n % 100 in 11..13 -> "th"
+    n % 10 == 1 -> "st"
+    n % 10 == 2 -> "nd"
+    n % 10 == 3 -> "rd"
+    else -> "th"
+}
+
 private enum class Dlg { TIP_TIME, AUTO_BACKUP, LICENCES, NONE, NAME, INCOME, BUDGET, AGE, RETURN, SMALL, TIME, BACKUP, RESTORE, WIPE }
 
 @OptIn(ExperimentalMaterial3Api::class)
