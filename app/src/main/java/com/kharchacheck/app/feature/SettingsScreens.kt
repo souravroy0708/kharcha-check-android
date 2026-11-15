@@ -502,3 +502,11 @@ fun RecurringScreen(vm: AppViewModel, nav: NavHostController) {
         )
     }
 }
+
+private fun ordinal(n: Int): String = n.toString() + when {
+    n % 100 in 11..13 -> "th"
+    n % 10 == 1 -> "st"
+    n % 10 == 2 -> "nd"
+    n % 10 == 3 -> "rd"
+    else -> "th"
+}
