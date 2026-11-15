@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -96,7 +97,26 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { HomeHero(vm, data, onSettings = { nav.navigate(SettingsRoute) }) }
+        item { HomeHero(vm, data, onSettings = { nav.navigate(SettingsRoute) }, onTools = { nav.navigate(com.kharchacheck.app.ui.nav.ToolsRoute) }) }
+        // Money health score: one number, one next step.
+        item {
+            val hs = remember(data) { com.kharchacheck.app.domain.HealthScorer.score(com.kharchacheck.app.feature.healthInputsFor(data)) }
+            Box(Modifier.padding(horizontal = 16.dp)) {
+                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.HealthRoute) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(hs.score?.toString() ?: "💯", fontSize = 32.sp, color = com.kharchacheck.app.feature.scoreColor(hs.score) ?: Kc.colors.text,
+                            style = MaterialTheme.typography.headlineMedium)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Money health: ${hs.grade}", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                            Text(hs.nextStep?.let { "Next: ${it.pillar.emoji} ${it.action}" } ?: if (hs.score == null) "Log a few weeks and add your salary to see your score." else "All six pillars look strong 🎉",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 2)
+                        }
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
 
         item {
             Box(Modifier.padding(horizontal = 16.dp)) {
@@ -181,6 +201,28 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
                             }
                         }
                         Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
+
+        // Wishlist: decisions due, or a nudge to use it
+        run {
+            val ready = data.settings.wishlist.filter { com.kharchacheck.app.domain.Wishlist.ready(it, LocalDate.now()) }
+            val skipped = com.kharchacheck.app.domain.Wishlist.savedBySkipping(data.settings.wishlist)
+            item {
+                Box(Modifier.padding(horizontal = 16.dp)) {
+                    KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.WishlistRoute) }) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🛒", fontSize = 26.sp); Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(if (ready.isNotEmpty()) "${ready.size} wishlist ${if (ready.size == 1) "item is" else "items are"} ready: still want ${if (ready.size == 1) "it" else "them"}?"
+                                    else "Tempted to buy something?", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                                Text(if (skipped > 0) "You've kept ${Money.format(skipped)} by waiting and skipping." else "Park it on the wishlist and decide after a short wait.",
+                                    style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                            }
+                            Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                        }
                     }
                 }
             }
@@ -304,7 +346,7 @@ private fun QuickChip(emoji: String, label: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit) {
+private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit, onTools: () -> Unit) {
     val r = d.report
     val s = d.settings
     val today = LocalDate.now()
@@ -323,6 +365,7 @@ private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit) {
                 Text(today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)) + " · private to this phone 🔒",
                     style = MaterialTheme.typography.bodySmall, color = MutedOnInk)
             }
+            IconButton(onClick = onTools) { Icon(Icons.Rounded.Apps, contentDescription = "All tools", tint = Color.White) }
             IconButton(onClick = { vm.setMaskAmounts(!s.maskAmounts) }) {
                 Icon(if (s.maskAmounts) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                     contentDescription = if (s.maskAmounts) "Show amounts" else "Hide amounts", tint = Color.White)

@@ -103,7 +103,7 @@ sealed interface ImportPhase {
     data object Starting : ImportPhase
     data class Reading(val page: Int, val total: Int) : ImportPhase
     data class Password(val wrong: Boolean) : ImportPhase
-    data class Review(val items: List<ImportItem>, val creditCard: Boolean, val seenBefore: LocalDate?) : ImportPhase
+    data class Review(val items: List<ImportItem>, val creditCard: Boolean, val seenBefore: LocalDate?, val card: StatementParser.CardSummary? = null) : ImportPhase
     data class Failed(val message: String) : ImportPhase
 }
 
@@ -133,7 +133,7 @@ class ImportViewModel(app: Application) : AndroidViewModel(app) {
                 is AutoReader.Outcome.Failed -> _phase.value = ImportPhase.Failed(out.message)
                 is AutoReader.Outcome.Rows -> _phase.value =
                     if (out.result.rows.isEmpty()) ImportPhase.Failed("No transactions were found. If your bank offers a CSV or Excel download, attach that instead; it's the most reliable.")
-                    else ImportPhase.Review(build(out.result, data), out.result.creditCard, seen)
+                    else ImportPhase.Review(build(out.result, data), out.result.creditCard, seen, out.result.card)
             }
         }
     }
@@ -248,6 +248,17 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController, route: ImportRoute) {
                 if (a != null) KindSwitch(a) { k -> vm.setStatementKind(a, k); ivm.restart(a.copy(kind = k), data) }
                 if (a?.isPdf == true) Text("Amounts look wrong? Send a reading report", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).clickable { reportAsk = true })
+                p.card?.let { cs -> val due = cs.dueDate; if (due != null && !due.isBefore(LocalDate.now().minusDays(1))) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).background(Kc.colors.warnBg).padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("💳 Card bill: ${cs.totalDuePaise?.let { Money.format(it) } ?: "amount"} due ${due.format(dayFmt)}", style = MaterialTheme.typography.titleSmall, color = Kc.colors.text)
+                            Text("Pay the total (not just the minimum${cs.minDuePaise?.let { " of " + Money.format(it) } ?: ""}) to avoid ~40% yearly interest.",
+                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Pill("🔔 Remind me", Haldi, Ink) { vm.addCardBill(a?.label?.ifBlank { null } ?: "Credit card", due, cs.totalDuePaise) }
+                    }
+                } }
                 Review(p, data, ivm, onPick = { picking = it }, onEdit = { editing = it }) { ids, drafts ->
                     if (ids.isEmpty()) vm.say("Nothing added")
                     else vm.confirmImported(ids, if (drafts) "${ids.size} drafts added to Review" else "Added ${ids.size} entries from your statement ✓")

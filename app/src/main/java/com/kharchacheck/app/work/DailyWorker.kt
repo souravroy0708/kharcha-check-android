@@ -87,6 +87,25 @@ class DailyWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx,
             }
         }
 
+        // Tax-saving reminders (old regime only): mid-Jan, mid-Feb, mid-Mar and 25 Mar while 80C room is left.
+        if (s.taxRegime == "OLD" && ((today.monthValue in 1..3 && today.dayOfMonth == 15) || (today.monthValue == 3 && today.dayOfMonth == 25))) {
+            val fy = com.kharchacheck.app.domain.TaxSaver.fyStart(today)
+            val manual = com.kharchacheck.app.domain.TaxBucket.entries.associateWith { s.taxManual["$fy|${it.name}"] ?: 0L }
+            val sum = com.kharchacheck.app.domain.TaxSaver.summary(txns, cats, today, s.taxAssign, manual, s.taxSlabPct, s.selfSenior, s.parentsSenior)
+            if (sum.possibleMoreTaxPaise >= 1_000_00) Notifier.post(applicationContext, 2600, Notifier.CH_REMINDERS,
+                "🧾 ${sum.daysLeft} days left to save tax",
+                "You can still save about ${Money.format(sum.possibleMoreTaxPaise)} in tax this year. Tap to see where you have room (80C, NPS, health insurance).",
+                "tax", publicTitle = "Tax-saving reminder")
+        }
+
+        // Wishlist: the cooling-off period ended today → "still want it?"
+        s.wishlist.filter { it.decision == com.kharchacheck.app.domain.WishDecision.WAITING && it.readyOn == today }.take(3).forEachIndexed { i, w ->
+            val hrs = com.kharchacheck.app.domain.Wishlist.lifeHours(w.pricePaise, s.monthlyIncomePaise, s.workHoursPerMonth)
+            Notifier.post(applicationContext, 2700 + i, Notifier.CH_REMINDERS, "🛒 Still want ${w.name}?",
+                "Your ${w.waitDays}-day wait is over. ${Money.format(w.pricePaise)}" + (hrs?.let { " = ${com.kharchacheck.app.domain.Wishlist.hoursLabel(it)}" } ?: "") +
+                    ". Most urges fade by now: if it still feels right, buy it guilt-free; if not, skip and keep the money.", "wishlist", publicTitle = "Wishlist reminder")
+        }
+
         // Bill reminders: N days before, the day before, on the day, and once when a day late.
         com.kharchacheck.app.domain.Bills.remindToday(c.tools.bills(), today).forEachIndexed { i, b ->
             val amount = if (b.bill.amountPaise > 0) " (${Money.format(b.bill.amountPaise)})" else ""

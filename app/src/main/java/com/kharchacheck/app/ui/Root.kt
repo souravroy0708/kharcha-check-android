@@ -67,6 +67,11 @@ import com.kharchacheck.app.feature.GuideScreen
 import com.kharchacheck.app.feature.ExportScreen
 import com.kharchacheck.app.feature.HiddenScreen
 import com.kharchacheck.app.feature.GoalsScreen
+import com.kharchacheck.app.feature.TaxScreen
+import com.kharchacheck.app.feature.WishlistScreen
+import com.kharchacheck.app.feature.HealthScreen
+import com.kharchacheck.app.feature.ToolsScreen
+import com.kharchacheck.app.feature.SubscriptionsScreen
 import com.kharchacheck.app.feature.WrappedScreen
 import com.kharchacheck.app.feature.CategoryInsightsScreen
 import com.kharchacheck.app.feature.ReportScreen
@@ -90,6 +95,11 @@ import com.kharchacheck.app.ui.nav.GuideRoute
 import com.kharchacheck.app.ui.nav.ExportRoute
 import com.kharchacheck.app.ui.nav.HiddenRoute
 import com.kharchacheck.app.ui.nav.GoalsRoute
+import com.kharchacheck.app.ui.nav.TaxRoute
+import com.kharchacheck.app.ui.nav.WishlistRoute
+import com.kharchacheck.app.ui.nav.HealthRoute
+import com.kharchacheck.app.ui.nav.ToolsRoute
+import com.kharchacheck.app.ui.nav.SubscriptionsRoute
 import com.kharchacheck.app.ui.nav.WrappedRoute
 import com.kharchacheck.app.ui.nav.CategoryInsightsRoute
 import com.kharchacheck.app.ui.nav.ReportRoute
@@ -154,6 +164,11 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 "settings" -> nav.navigate(SettingsRoute)
                 "dues" -> nav.navigate(DuesRoute)
                 "goals" -> nav.navigate(GoalsRoute)
+                "tax" -> nav.navigate(TaxRoute)
+                "wishlist" -> nav.navigate(WishlistRoute)
+                "guide" -> nav.navigate(GuideRoute())
+                "guide_online" -> nav.navigate(GuideRoute(tab = 2))
+                "subs" -> nav.navigate(SubscriptionsRoute)
                 else -> if (target.startsWith("import:")) target.removePrefix("import:").toLongOrNull()?.let { nav.navigate(ImportRoute(it)) }
             }
         }
@@ -222,6 +237,11 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<ExportRoute> { ExportScreen(vm, nav) }
                 composable<HiddenRoute> { HiddenScreen(vm, nav) }
                 composable<GoalsRoute> { GoalsScreen(vm, nav) }
+                composable<TaxRoute> { TaxScreen(vm, nav) }
+                composable<WishlistRoute> { WishlistScreen(vm, nav) }
+                composable<HealthRoute> { HealthScreen(vm, nav) }
+                composable<ToolsRoute> { ToolsScreen(vm, nav) }
+                composable<SubscriptionsRoute> { SubscriptionsScreen(vm, nav) }
                 composable<GuideRoute> { e -> GuideScreen(vm, nav, e.toRoute<GuideRoute>()) }
                 composable<BillsRoute> { BillsScreen(vm, nav) }
                 composable<WrappedRoute> { e -> WrappedScreen(vm, nav, e.toRoute<WrappedRoute>()) }

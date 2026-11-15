@@ -40,7 +40,7 @@ import com.kharchacheck.app.domain.sms.SmsParser
 import com.kharchacheck.app.export.ReportPdf
 import com.kharchacheck.app.widget.KharchaWidget
 import com.kharchacheck.app.work.DailyWorker
-import com.kharchacheck.app.work.MorningTipWorker
+import com.kharchacheck.app.work.NudgeWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -142,7 +142,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val s = c.settings.current()
             _locked.value = s.appLock
             if (s.onboarded) DailyWorker.schedule(ctx, s.reminderHour, s.reminderMinute)
-            if (s.onboarded && s.morningTip) MorningTipWorker.schedule(ctx, s.tipHour, s.tipMinute)
+            if (s.onboarded && s.morningTip) NudgeWorker.scheduleAll(ctx, s.nudgeTimes(), s.nudgeSlotsOff)
             val added = repo.generateRecurring()
             if (added > 0) say("$added repeating ${if (added == 1) "entry" else "entries"} added. Check them in Review.")
         }
@@ -168,7 +168,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val today = LocalDate.now()
         val report = ReportEngine.build(YearMonth.from(today), r.t, map, reportConfig(r.s, r.b))
         val game = Gamification.build(r.t, map, r.g, r.s.noSpendDays, r.s.challengesWon, r.s.monthlyBudgetPaise, today,
-            practicedDays = r.s.practicedTipDays, planStepsDone = r.s.planDone.size)
+            practicedDays = r.s.practicedTipDays, planStepsDone = r.s.planDone.size,
+            wishesSkipped = r.s.wishlist.count { it.decision == com.kharchacheck.app.domain.WishDecision.SKIPPED })
         val ch = Gamification.challenge(r.s.activeChallenge)?.let {
             Gamification.progress(it, LocalDate.ofEpochDay(r.s.challengeStartDay), r.t, map, r.s.noSpendDays, today)
         }
@@ -431,6 +432,44 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun pendingCrash(): String? = CrashReporter.pending(ctx)
     fun clearCrash() = CrashReporter.clear(ctx)
 
+    // ---- Wishlist (cooling-off before buying) ----
+    fun addWish(name: String, pricePaise: Long, usesPerMonth: Int, wantSignals: Int) = viewModelScope.launch {
+        val days = com.kharchacheck.app.domain.Wishlist.waitDays(pricePaise)
+        c.settings.updateWishlist { it + com.kharchacheck.app.domain.WishItem(System.currentTimeMillis(), name.trim(), pricePaise, LocalDate.now(), days, usesPerMonth, wantSignals) }
+        say("🛒 Parked for $days days. If you still want it then, buy it guilt-free.")
+    }
+    fun decideWish(id: Long, d: com.kharchacheck.app.domain.WishDecision) = viewModelScope.launch {
+        val item = c.settings.current().wishlist.firstOrNull { it.id == id } ?: return@launch
+        c.settings.updateWishlist { l -> l.map { if (it.id == id) it.copy(decision = d, decidedOn = LocalDate.now()) else it } }
+        if (d == com.kharchacheck.app.domain.WishDecision.SKIPPED) say("🧘 Skipped ${item.name}: ${com.kharchacheck.app.core.model.Money.format(item.pricePaise)} stays yours. +30 XP")
+    }
+    fun extendWish(id: Long, days: Int) = viewModelScope.launch { c.settings.updateWishlist { l -> l.map { if (it.id == id) it.copy(waitDays = it.waitDays + days) else it } } }
+    fun deleteWish(id: Long) = viewModelScope.launch { c.settings.updateWishlist { l -> l.filterNot { it.id == id } } }
+    fun setWorkHours(h: Int) = viewModelScope.launch { c.settings.setWorkHours(h) }
+
+    // ---- Tax-saving tracker ----
+    fun setTaxProfile(regime: com.kharchacheck.app.domain.TaxRegime, slab: Int, selfSenior: Boolean, parentsSenior: Boolean) =
+        viewModelScope.launch { c.settings.setTaxProfile(regime.name, slab, selfSenior, parentsSenior) }
+    fun assignTax(t: Txn, bucket: com.kharchacheck.app.domain.TaxBucket?) = viewModelScope.launch { c.settings.assignTax(t.id, bucket) }
+    fun setTaxManual(fy: Int, bucket: com.kharchacheck.app.domain.TaxBucket, paise: Long) = viewModelScope.launch { c.settings.setTaxManual("$fy|${bucket.name}", paise) }
+
+    // ---- Subscriptions ----
+    fun cancelSubscription(sub: com.kharchacheck.app.domain.Subscription) = viewModelScope.launch {
+        c.settings.setSubscription(sub.key, LocalDate.now(), kept = false)
+        say("✂️ ${sub.payee} marked cancelled: ${com.kharchacheck.app.core.model.Money.format(sub.yearlyPaise)} a year saved. You'll be warned if it charges again.")
+    }
+    fun keepSubscription(sub: com.kharchacheck.app.domain.Subscription, keep: Boolean) = viewModelScope.launch { c.settings.setSubscription(sub.key, null, keep) }
+    fun remindSubscription(sub: com.kharchacheck.app.domain.Subscription) = viewModelScope.launch {
+        c.tools.saveBill(Bill(name = sub.payee, emoji = sub.category?.emoji ?: "🔁", dueDay = sub.lastPaid.dayOfMonth, amountPaise = sub.monthlyPaise, remindDaysBefore = 3))
+        say("🔔 You'll be reminded 3 days before ${sub.payee} renews")
+    }
+    /** From a credit-card statement's summary box. Updates the bill if one with the same name exists. */
+    fun addCardBill(name: String, due: LocalDate, totalPaise: Long?) = viewModelScope.launch {
+        val existing = c.tools.bills().firstOrNull { it.name.equals(name, true) }
+        c.tools.saveBill((existing ?: Bill(name = name, emoji = "💳", dueDay = due.dayOfMonth)).copy(dueDay = due.dayOfMonth, amountPaise = totalPaise ?: 0))
+        say("💳 Reminder set: ${totalPaise?.let { com.kharchacheck.app.core.model.Money.format(it) + " " } ?: ""}due on ${due.dayOfMonth} ${due.month.name.lowercase().replaceFirstChar { it.uppercase() }.take(3)}")
+    }
+
     // ---- Daily tip, salary plan ----
     fun markTipPracticed() = viewModelScope.launch {
         val today = LocalDate.now().toEpochDay()
@@ -444,9 +483,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (!was) say("Step done 🪜 +40 XP")
     }
     fun setPlanProfile(dependents: Boolean, risk: String, emergencySaved: Long) = viewModelScope.launch { c.settings.setPlanProfile(dependents, risk, emergencySaved) }
+    fun setNudgeTime(slot: com.kharchacheck.app.domain.NudgeSlot, h: Int, m: Int) = viewModelScope.launch {
+        c.settings.setNudgeTime(slot, h, m)
+        val st = c.settings.current(); if (st.morningTip) NudgeWorker.scheduleAll(ctx, st.nudgeTimes(), st.nudgeSlotsOff)
+    }
+    fun setNudgeSlot(slot: com.kharchacheck.app.domain.NudgeSlot, on: Boolean) = viewModelScope.launch {
+        c.settings.setNudgeSlot(slot, on)
+        val st = c.settings.current(); if (st.morningTip) NudgeWorker.scheduleAll(ctx, st.nudgeTimes(), st.nudgeSlotsOff)
+    }
     fun setMorningTip(on: Boolean, h: Int, m: Int) = viewModelScope.launch {
         c.settings.setMorningTip(on, h, m)
-        if (on) MorningTipWorker.schedule(ctx, h, m) else MorningTipWorker.cancel(ctx)
+        val st = c.settings.current()
+        if (on) NudgeWorker.scheduleAll(ctx, st.nudgeTimes(), st.nudgeSlotsOff) else NudgeWorker.cancelAll(ctx)
     }
 
     // ---- Dues & bills ----
@@ -468,7 +516,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun finishOnboarding(name: String, income: Long, budget: Long) = viewModelScope.launch {
         c.settings.completeOnboarding(name, income, budget)
         val s = c.settings.current(); DailyWorker.schedule(ctx, s.reminderHour, s.reminderMinute)
-        if (s.morningTip) MorningTipWorker.schedule(ctx, s.tipHour, s.tipMinute)
+        if (s.morningTip) NudgeWorker.scheduleAll(ctx, s.nudgeTimes(), s.nudgeSlotsOff)
     }
     fun setName(v: String) = viewModelScope.launch { c.settings.setName(v) }
     fun setIncome(v: Long) = viewModelScope.launch { c.settings.setIncome(v) }

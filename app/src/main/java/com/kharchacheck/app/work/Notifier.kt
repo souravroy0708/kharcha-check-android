@@ -24,8 +24,8 @@ object Notifier {
         nm.createNotificationChannel(NotificationChannel(CH_REMINDERS, "Reminders & monthly report", NotificationManager.IMPORTANCE_DEFAULT).apply {
             description = "Daily logging nudge, streak saver and month-end report"
         })
-        nm.createNotificationChannel(NotificationChannel(CH_TIPS, "Daily money tip", NotificationManager.IMPORTANCE_DEFAULT).apply {
-            description = "One short saving or investing tip each morning, with something small to try"
+        nm.createNotificationChannel(NotificationChannel(CH_TIPS, "Daily money nudges", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Up to three a day: invest with purpose (morning), avoid unnecessary spending (afternoon), a saving trick (evening)"
         })
         // SMS reading was removed: clean up its old notification channel on phones that had it.
         nm.deleteNotificationChannel("captured")

@@ -64,7 +64,37 @@ data class Settings(
     val backupIncludeFiles: Boolean = true,
     /** Goal plans (template, today's cost, timeline, reminder day), keyed by goal id. */
     val goalPlans: Map<Long, com.kharchacheck.app.domain.GoalPlan> = emptyMap(),
-)
+    // Tax-saving tracker
+    val taxRegime: String = "UNKNOWN",
+    val taxSlabPct: Int = 20,
+    val selfSenior: Boolean = false,
+    val parentsSenior: Boolean = false,
+    /** Entry id → tax bucket chosen by the user (null = "not for tax"). Entries not listed use the suggestion. */
+    val taxAssign: Map<Long, com.kharchacheck.app.domain.TaxBucket?> = emptyMap(),
+    /** "fyStart|BUCKET" → amount paid outside the app (EPF from the salary slip, home-loan principal…). */
+    val taxManual: Map<String, Long> = emptyMap(),
+    // Subscription manager
+    val subsCancelled: Map<String, java.time.LocalDate> = emptyMap(),
+    val subsKept: Set<String> = emptySet(),
+    // Wishlist (cooling-off before buying)
+    val wishlist: List<com.kharchacheck.app.domain.WishItem> = emptyList(),
+    /** Working hours a month, for "price in hours of your work". */
+    val workHoursPerMonth: Int = 176,
+    // Daily nudges: `morningTip` is the master switch and tipHour/tipMinute the morning time.
+    val noonHour: Int = 13,
+    val noonMinute: Int = 0,
+    val eveHour: Int = 19,
+    val eveMinute: Int = 30,
+    val nudgeSlotsOff: Set<String> = emptySet(),
+    /** Personal nudge family → day it was last shown (for cooldowns). */
+    val nudgeLog: Map<String, java.time.LocalDate> = emptyMap(),
+) {
+    fun nudgeTimes(): Map<com.kharchacheck.app.domain.NudgeSlot, Pair<Int, Int>> = mapOf(
+        com.kharchacheck.app.domain.NudgeSlot.MORNING to (tipHour to tipMinute),
+        com.kharchacheck.app.domain.NudgeSlot.AFTERNOON to (noonHour to noonMinute),
+        com.kharchacheck.app.domain.NudgeSlot.EVENING to (eveHour to eveMinute),
+    )
+}
 
 private val Context.store: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -109,6 +139,22 @@ class SettingsRepository(private val context: Context) {
         val budgetAlerts = stringSetPreferencesKey("budget_alerts")
         val backupFiles = booleanPreferencesKey("backup_files")
         val goalPlans = stringPreferencesKey("goal_plans")
+        val taxRegime = stringPreferencesKey("tax_regime")
+        val taxSlab = intPreferencesKey("tax_slab")
+        val selfSenior = booleanPreferencesKey("self_senior")
+        val parentsSenior = booleanPreferencesKey("parents_senior")
+        val taxAssign = stringPreferencesKey("tax_assign")
+        val taxManual = stringPreferencesKey("tax_manual")
+        val subsCancelled = stringSetPreferencesKey("subs_cancelled")
+        val subsKept = stringSetPreferencesKey("subs_kept")
+        val wishlist = stringPreferencesKey("wishlist")
+        val workHours = intPreferencesKey("work_hours")
+        val noonH = intPreferencesKey("noon_h")
+        val noonM = intPreferencesKey("noon_m")
+        val eveH = intPreferencesKey("eve_h")
+        val eveM = intPreferencesKey("eve_m")
+        val nudgeOff = stringSetPreferencesKey("nudge_off")
+        val nudgeLog = stringSetPreferencesKey("nudge_log")
     }
 
     val settings: Flow<Settings> = context.store.data.map { p ->
@@ -150,6 +196,23 @@ class SettingsRepository(private val context: Context) {
             budgetAlertsSent = p[K.budgetAlerts].orEmpty(),
             backupIncludeFiles = p[K.backupFiles] ?: true,
             goalPlans = GoalPlansJson.decode(p[K.goalPlans]),
+            taxRegime = p[K.taxRegime] ?: "UNKNOWN",
+            taxSlabPct = p[K.taxSlab] ?: 20,
+            selfSenior = p[K.selfSenior] ?: false,
+            parentsSenior = p[K.parentsSenior] ?: false,
+            taxAssign = TaxJson.decodeAssign(p[K.taxAssign]),
+            taxManual = TaxJson.decodeManual(p[K.taxManual]),
+            subsCancelled = p[K.subsCancelled].orEmpty().mapNotNull { e ->
+                val i = e.lastIndexOf('|'); if (i < 0) null else e.substring(0, i) to java.time.LocalDate.ofEpochDay(e.substring(i + 1).toLongOrNull() ?: return@mapNotNull null)
+            }.toMap(),
+            subsKept = p[K.subsKept].orEmpty(),
+            wishlist = WishJson.decode(p[K.wishlist]),
+            workHoursPerMonth = p[K.workHours] ?: 176,
+            noonHour = p[K.noonH] ?: 13, noonMinute = p[K.noonM] ?: 0, eveHour = p[K.eveH] ?: 19, eveMinute = p[K.eveM] ?: 30,
+            nudgeSlotsOff = p[K.nudgeOff].orEmpty(),
+            nudgeLog = p[K.nudgeLog].orEmpty().mapNotNull { e ->
+                val i = e.lastIndexOf('|'); if (i < 0) null else e.substring(0, i) to java.time.LocalDate.ofEpochDay(e.substring(i + 1).toLongOrNull() ?: return@mapNotNull null)
+            }.toMap(),
         )
     }
 
@@ -198,6 +261,40 @@ class SettingsRepository(private val context: Context) {
     }
     suspend fun deleteGoalPlan(goalId: Long) = context.store.edit { it[K.goalPlans] = GoalPlansJson.encode(GoalPlansJson.decode(it[K.goalPlans]) - goalId) }
     suspend fun setGoalPlans(all: Map<Long, com.kharchacheck.app.domain.GoalPlan>) = context.store.edit { it[K.goalPlans] = GoalPlansJson.encode(all) }
+    suspend fun setTaxProfile(regime: String, slab: Int, selfSenior: Boolean, parentsSenior: Boolean) = context.store.edit {
+        it[K.taxRegime] = regime; it[K.taxSlab] = slab; it[K.selfSenior] = selfSenior; it[K.parentsSenior] = parentsSenior
+    }
+    suspend fun assignTax(id: Long, bucket: com.kharchacheck.app.domain.TaxBucket?) = context.store.edit {
+        it[K.taxAssign] = TaxJson.encodeAssign(TaxJson.decodeAssign(it[K.taxAssign]) + (id to bucket))
+    }
+    suspend fun setTaxManual(key: String, paise: Long) = context.store.edit {
+        it[K.taxManual] = TaxJson.encodeManual(TaxJson.decodeManual(it[K.taxManual]) + (key to paise))
+    }
+    suspend fun setSubscription(key: String, cancelledOn: java.time.LocalDate?, kept: Boolean) = context.store.edit {
+        it[K.subsCancelled] = it[K.subsCancelled].orEmpty().filterNot { e -> e.startsWith("$key|") }.toSet() +
+            (cancelledOn?.let { d -> setOf("$key|${d.toEpochDay()}") } ?: emptySet())
+        it[K.subsKept] = if (kept) it[K.subsKept].orEmpty() + key else it[K.subsKept].orEmpty() - key
+    }
+    suspend fun updateWishlist(f: (List<com.kharchacheck.app.domain.WishItem>) -> List<com.kharchacheck.app.domain.WishItem>) = context.store.edit {
+        it[K.wishlist] = WishJson.encode(f(WishJson.decode(it[K.wishlist])).takeLast(300))
+    }
+    suspend fun setNudgeTime(slot: com.kharchacheck.app.domain.NudgeSlot, h: Int, m: Int) = context.store.edit {
+        when (slot) {
+            com.kharchacheck.app.domain.NudgeSlot.MORNING -> { it[K.tipH] = h; it[K.tipM] = m }
+            com.kharchacheck.app.domain.NudgeSlot.AFTERNOON -> { it[K.noonH] = h; it[K.noonM] = m }
+            com.kharchacheck.app.domain.NudgeSlot.EVENING -> { it[K.eveH] = h; it[K.eveM] = m }
+        }
+    }
+    suspend fun setNudgeSlot(slot: com.kharchacheck.app.domain.NudgeSlot, on: Boolean) = context.store.edit {
+        it[K.nudgeOff] = if (on) it[K.nudgeOff].orEmpty() - slot.name else it[K.nudgeOff].orEmpty() + slot.name
+    }
+    /** Remembers when a personal nudge family was shown; keeps only the last 60 days. */
+    suspend fun logNudge(family: String, day: java.time.LocalDate) = context.store.edit {
+        val cutoff = day.minusDays(60).toEpochDay()
+        it[K.nudgeLog] = (it[K.nudgeLog].orEmpty().filterNot { e -> e.startsWith("$family|") || (e.substringAfterLast('|').toLongOrNull() ?: 0) < cutoff } +
+            "$family|${day.toEpochDay()}").toSet()
+    }
+    suspend fun setWorkHours(h: Int) = context.store.edit { it[K.workHours] = h }
     suspend fun setBackupIncludeFiles(v: Boolean) = context.store.edit { it[K.backupFiles] = v }
     suspend fun setMaskAmounts(v: Boolean) = context.store.edit { it[K.mask] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
@@ -223,6 +320,10 @@ class SettingsRepository(private val context: Context) {
         it[K.dependents] = s.dependents; it[K.risk] = s.risk; it[K.emergencySaved] = s.emergencySavedPaise
         it[K.hidden] = s.hiddenIds.map(Long::toString).toSet()
         it[K.goalPlans] = GoalPlansJson.encode(s.goalPlans)
+        it[K.taxRegime] = s.taxRegime; it[K.taxSlab] = s.taxSlabPct; it[K.selfSenior] = s.selfSenior; it[K.parentsSenior] = s.parentsSenior
+        it[K.taxAssign] = TaxJson.encodeAssign(s.taxAssign); it[K.taxManual] = TaxJson.encodeManual(s.taxManual)
+        it[K.subsCancelled] = s.subsCancelled.map { (k, d) -> "$k|${d.toEpochDay()}" }.toSet(); it[K.subsKept] = s.subsKept
+        it[K.wishlist] = WishJson.encode(s.wishlist); it[K.workHours] = s.workHoursPerMonth
     }
 
     suspend fun ensureWisdomSeed() = context.store.edit {
@@ -247,4 +348,33 @@ object GoalPlansJson {
                 o.optBoolean("step", true), o.optInt("day", 5), o.optInt("age", -1).takeIf { it >= 0 })
         }
     }.getOrDefault(emptyMap())
+}
+
+object TaxJson {
+    fun encodeAssign(m: Map<Long, com.kharchacheck.app.domain.TaxBucket?>): String =
+        org.json.JSONObject().apply { m.forEach { (id, b) -> put(id.toString(), b?.name ?: "NONE") } }.toString()
+    fun decodeAssign(s: String?): Map<Long, com.kharchacheck.app.domain.TaxBucket?> = runCatching {
+        val o = org.json.JSONObject(s ?: return emptyMap())
+        o.keys().asSequence().associate { k -> k.toLong() to o.getString(k).let { v -> com.kharchacheck.app.domain.TaxBucket.entries.firstOrNull { it.name == v } } }
+    }.getOrDefault(emptyMap())
+    fun encodeManual(m: Map<String, Long>): String = org.json.JSONObject().apply { m.forEach { (k, v) -> put(k, v) } }.toString()
+    fun decodeManual(s: String?): Map<String, Long> = runCatching {
+        val o = org.json.JSONObject(s ?: return emptyMap()); o.keys().asSequence().associateWith { o.getLong(it) }
+    }.getOrDefault(emptyMap())
+}
+
+object WishJson {
+    fun encode(l: List<com.kharchacheck.app.domain.WishItem>): String = org.json.JSONArray(l.map { w ->
+        org.json.JSONObject().put("id", w.id).put("name", w.name).put("price", w.pricePaise).put("added", w.addedOn.toEpochDay()).put("wait", w.waitDays)
+            .put("uses", w.usesPerMonth).put("want", w.wantSignals).put("decision", w.decision.name).put("decided", w.decidedOn?.toEpochDay() ?: -1)
+    }).toString()
+    fun decode(s: String?): List<com.kharchacheck.app.domain.WishItem> = runCatching {
+        val a = org.json.JSONArray(s ?: return emptyList())
+        (0 until a.length()).map { a.getJSONObject(it) }.map { o ->
+            com.kharchacheck.app.domain.WishItem(o.getLong("id"), o.getString("name"), o.getLong("price"), java.time.LocalDate.ofEpochDay(o.getLong("added")),
+                o.getInt("wait"), o.optInt("uses"), o.optInt("want"),
+                runCatching { com.kharchacheck.app.domain.WishDecision.valueOf(o.getString("decision")) }.getOrDefault(com.kharchacheck.app.domain.WishDecision.WAITING),
+                o.optLong("decided", -1).takeIf { it >= 0 }?.let(java.time.LocalDate::ofEpochDay))
+        }
+    }.getOrDefault(emptyList())
 }

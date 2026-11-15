@@ -92,7 +92,7 @@ fun GuideScreen(vm: AppViewModel, nav: NavHostController, route: GuideRoute) {
     val plan = remember(data) { salaryPlanFor(data) }
 
     SubScreen("📘 Smart Money Guide", onBack = { nav.popBackStack() }) {
-        item { Segmented(listOf("My salary plan", "Investing", "Online spend"), tab) { tab = it } }
+        item { Segmented(listOf("Salary plan", "Investing", "Online", "📚 Research"), tab) { tab = it } }
         when (tab) {
             0 -> {
                 item {
@@ -127,7 +127,23 @@ fun GuideScreen(vm: AppViewModel, nav: NavHostController, route: GuideRoute) {
                 }
                 item { Box(Modifier.padding(horizontal = 0.dp)) { RulesList(data) } }
             }
+            3 -> {
+                item {
+                    Text("What books and research say about spending well. Every card names its source; ideas are in our own words.",
+                        style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
+                }
+                com.kharchacheck.app.domain.LibTopic.entries.forEach { topic ->
+                    val cards = com.kharchacheck.app.domain.WisdomLibrary.byTopic(topic)
+                    if (cards.isNotEmpty()) {
+                        item(key = "t-" + topic.name) { Text(topic.label, style = MaterialTheme.typography.titleLarge, color = Kc.colors.text, modifier = Modifier.padding(top = 6.dp)) }
+                        cards.forEach { c -> item(key = c.id) { LibCardView(c) } }
+                    }
+                }
+            }
             else -> {
+                item { LibCardView(com.kharchacheck.app.domain.WisdomLibrary.byTopic(com.kharchacheck.app.domain.LibTopic.ONLINE)
+                    .let { it[Math.floorMod(java.time.LocalDate.now().toEpochDay(), it.size.toLong()).toInt()] }, title = "🔬 Today's research") }
+                item { BigButton("🛒 Tempted? Park it on the wishlist first") { nav.navigate(com.kharchacheck.app.ui.nav.WishlistRoute) } }
                 val leak = OnlineSpending.biggestLeak(data.report.categories)
                 if (leak != null) item {
                     KcCard(title = "Your biggest online leak") {
@@ -141,6 +157,7 @@ fun GuideScreen(vm: AppViewModel, nav: NavHostController, route: GuideRoute) {
                         }
                     }
                 }
+                item { com.kharchacheck.app.ui.components.BigButton("🔁 See all your subscriptions") { nav.navigate(com.kharchacheck.app.ui.nav.SubscriptionsRoute) } }
                 val first = leak?.let { OnlineSpending.tipsFor(it.category.key) }.orEmpty()
                 val ordered = first + OnlineSpending.tips.filter { it !in first }
                 ordered.forEach { t ->
@@ -168,6 +185,15 @@ fun GuideScreen(vm: AppViewModel, nav: NavHostController, route: GuideRoute) {
             vm.setPlanProfile(s.dependents, s.risk, it); dlg = GDlg.NONE
         }
         GDlg.NONE -> Unit
+    }
+}
+
+@Composable
+private fun LibCardView(c: com.kharchacheck.app.domain.LibCard, title: String? = null) {
+    KcCard(title = title, padding = 14.dp) {
+        Text("${c.kind.emoji} ${c.source}", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted)
+        Text(c.idea, style = MaterialTheme.typography.bodyLarge, color = Kc.colors.text)
+        Text("✅ ${c.action}", style = MaterialTheme.typography.bodyMedium, color = Kc.colors.good)
     }
 }
 

@@ -109,6 +109,20 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
 
         item {
             Pad {
+                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.ToolsRoute) }) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🧰", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("All money tools", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                            Text("Health score, goals, wishlist, subscriptions, tax, wealth, bills, dues, import & export", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        }
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
+        item {
+            Pad {
                 KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.GuideRoute()) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📘", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
@@ -137,6 +151,21 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
                             Text("Your mutual funds at today's prices, FDs, PPF, bank balances and loans in one number.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                         }
                         Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+            }
+        }
+
+        item {
+            Pad {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    KcCard(Modifier.weight(1f), onClick = { nav.navigate(com.kharchacheck.app.ui.nav.TaxRoute) }) {
+                        Text("🧾 Tax saver", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("80C / NPS / health insurance left this year", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    KcCard(Modifier.weight(1f), onClick = { nav.navigate(com.kharchacheck.app.ui.nav.SubscriptionsRoute) }) {
+                        Text("🔁 Subscriptions", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("What you pay for every month, per year", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     }
                 }
             }

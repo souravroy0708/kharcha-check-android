@@ -89,6 +89,11 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                     .put("practiced", JSONArray(s.practicedTipDays.toList())).put("planDone", JSONArray(s.planDone.toList()))
                     .put("hidden", JSONArray(s.hiddenIds.toList()))
                     .put("goalPlans", com.kharchacheck.app.data.repo.GoalPlansJson.encode(s.goalPlans))
+                    .put("taxRegime", s.taxRegime).put("taxSlab", s.taxSlabPct).put("selfSenior", s.selfSenior).put("parentsSenior", s.parentsSenior)
+                    .put("taxAssign", com.kharchacheck.app.data.repo.TaxJson.encodeAssign(s.taxAssign))
+                    .put("taxManual", com.kharchacheck.app.data.repo.TaxJson.encodeManual(s.taxManual))
+                    .put("subsCancelled", JSONArray(s.subsCancelled.map { (k, d) -> "$k|${d.toEpochDay()}" })).put("subsKept", JSONArray(s.subsKept.toList()))
+                    .put("wishlist", com.kharchacheck.app.data.repo.WishJson.encode(s.wishlist)).put("workHours", s.workHoursPerMonth)
                     .put("dependents", s.dependents).put("risk", s.risk).put("emergencySaved", s.emergencySavedPaise)
             })
         // KCB3: a ZIP streamed through chunked encryption. Files first (one at a time, never all in memory),
@@ -200,6 +205,16 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                 practicedTipDays = longs(s.optJSONArray("practiced")), planDone = strs(s.optJSONArray("planDone")),
                 hiddenIds = longs(s.optJSONArray("hidden")),
                 goalPlans = com.kharchacheck.app.data.repo.GoalPlansJson.decode(s.optString("goalPlans").ifBlank { null }),
+                taxRegime = s.optString("taxRegime", "UNKNOWN"), taxSlabPct = s.optInt("taxSlab", 20),
+                selfSenior = s.optBoolean("selfSenior"), parentsSenior = s.optBoolean("parentsSenior"),
+                taxAssign = com.kharchacheck.app.data.repo.TaxJson.decodeAssign(s.optString("taxAssign").ifBlank { null }),
+                taxManual = com.kharchacheck.app.data.repo.TaxJson.decodeManual(s.optString("taxManual").ifBlank { null }),
+                subsCancelled = strs(s.optJSONArray("subsCancelled")).mapNotNull { e ->
+                    val i = e.lastIndexOf('|'); if (i < 0) null else e.substring(0, i) to java.time.LocalDate.ofEpochDay(e.substring(i + 1).toLongOrNull() ?: return@mapNotNull null)
+                }.toMap(),
+                subsKept = strs(s.optJSONArray("subsKept")),
+                wishlist = com.kharchacheck.app.data.repo.WishJson.decode(s.optString("wishlist").ifBlank { null }),
+                workHoursPerMonth = s.optInt("workHours", 176),
                 dependents = s.optBoolean("dependents"), risk = s.optString("risk", "BALANCED"), emergencySavedPaise = s.optLong("emergencySaved"),
             ))
         }

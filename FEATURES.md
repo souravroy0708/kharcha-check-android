@@ -34,7 +34,7 @@
 | Automatic encrypted backup to a chosen folder (Drive) | `work/BackgroundWork.kt` (`AutoBackupWorker`), `data/security/SecretBox.kt`, `domain/Wealth.kt` (`BackupRotation`) |
 | User-controlled crash reports | `work/CrashReporter.kt`, `ui/Root.kt` |
 | Smart Money Guide: salary plan, money ladder, SIP split, online-spending traps | `domain/SalaryPlanner.kt`, `domain/OnlineSpending.kt`, `feature/GuideScreen.kt` |
-| Daily morning tip notification + "I did it" XP loop, new badges | `work/MorningTipWorker.kt`, `feature/HomeScreen.kt`, `domain/Gamification.kt` |
+| 3 daily nudges (invest / avoid spending / saving trick), personal + unique pools | `domain/Nudges.kt`, `work/NudgeWorker.kt`, `feature/SettingsScreens.kt` |
 | Position-aware PDF statement table reader | `domain/read/PdfTable.kt`, `read/AutoReader.kt` (`GlyphStripper`) |
 | Duplicate-proof imports | `domain/Dedupe.kt`, `feature/ImportScreen.kt` |
 | Excel / CSV export screen | `domain/export/Exporter.kt`, `domain/export/XlsxWriter.kt`, `feature/ExportScreen.kt` |
@@ -43,3 +43,9 @@
 | Import history with batch delete | `feature/StatementsScreen.kt`, `ui/AppViewModel.kt` (`deleteImportBatch`) |
 | Balance-verified statement amounts (unsure → 0, never guessed) | `domain/read/PdfTable.kt` (`verifyWithBalance`), `feature/ImportScreen.kt` |
 | Goal planner: inflation-adjusted SIPs, leak swap, rescued money, SIP reminders | `domain/GoalPlanner.kt`, `feature/GoalsScreen.kt`, `work/DailyWorker.kt`, `data/repo/SettingsRepository.kt` (`GoalPlansJson`) |
+| Tax saver (80C / 80CCD(1B) / 80D) | `domain/TaxSaver.kt`, `feature/TaxScreen.kt`, `work/DailyWorker.kt` |
+| Subscription manager | `domain/Subscriptions.kt`, `feature/SubscriptionsScreen.kt` |
+| Card statement summary → bill | `domain/read/StatementParser.kt` (`cardSummary`), `read/AutoReader.kt`, `feature/ImportScreen.kt` |
+| Wishlist cooling-off, hours-of-work price, cost per use | `domain/Wishlist.kt`, `feature/WishlistScreen.kt`, `feature/EditTxnScreen.kt`, `work/DailyWorker.kt` |
+| Books & research library (sourced, paraphrased) | `domain/WisdomLibrary.kt`, `feature/GuideScreen.kt` |
+| Money Health Score + Tools hub | `domain/HealthScore.kt`, `feature/HealthScreen.kt`, `feature/ToolsScreen.kt`, `feature/HomeScreen.kt` |

@@ -16,7 +16,9 @@ import kotlinx.serialization.Serializable
 @Serializable data class ImportRoute(val attachmentId: Long)
 
 /** id = 0 for a new entry. type preselects the tab. fromDraft = open with a parsed shared/pasted draft. */
-@Serializable data class EditRoute(val id: Long = 0, val type: String = "EXPENSE", val fromDraft: Boolean = false, val categoryId: Long = 0)
+@Serializable data class EditRoute(val id: Long = 0, val type: String = "EXPENSE", val fromDraft: Boolean = false, val categoryId: Long = 0,
+    /** Optional pre-fill for a new entry (e.g. "I bought it" from the wishlist). */
+    val amountPaise: Long = 0, val payee: String = "")
 @Serializable data class CategoryInsightsRoute(val categoryId: Long, val months: Int = 6)
 @Serializable object DuesRoute
 @Serializable object BillsRoute
@@ -27,3 +29,8 @@ import kotlinx.serialization.Serializable
 @Serializable object ExportRoute
 @Serializable object HiddenRoute
 @Serializable object GoalsRoute
+@Serializable object TaxRoute
+@Serializable object SubscriptionsRoute
+@Serializable object WishlistRoute
+@Serializable object HealthRoute
+@Serializable object ToolsRoute

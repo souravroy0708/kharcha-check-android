@@ -137,7 +137,9 @@ class AutoReader(private val context: Context, private val ocr: OcrEngine) {
             val rows = if (table != null && table.rows.isNotEmpty()) {
                 table.rows + if (scannedLines.isNotEmpty()) StatementParser.fromLines(scannedLines, month, cardHint).rows else emptyList()
             } else StatementParser.fromLines(textLines + scannedLines, month, cardHint).rows
-            if (rows.isNotEmpty() || textLines.isEmpty()) return Outcome.Rows(StatementParser.Result(rows, card || (table?.creditCard ?: false)))
+            val summary = StatementParser.cardSummary(textLines, month)
+            val isCard = card || (table?.creditCard ?: false)   // only the user's Bank/Card choice or the table decides; never a stray "total due" line
+            if (rows.isNotEmpty() || textLines.isEmpty()) return Outcome.Rows(StatementParser.Result(rows, isCard, summary?.takeIf { isCard }))
 
             // Text came out but nothing parsed (fonts without proper character maps): read the pages visually instead.
             val ocrLines = mutableListOf<String>()

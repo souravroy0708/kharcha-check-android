@@ -91,6 +91,7 @@ object Gamification {
         Badge("challenge_won", "🏆", "Challenger", "Win a challenge"),
         Badge("habit_builder", "🧠", "Habit Builder", "Practise 7 daily money tips"),
         Badge("plan_progress", "🪜", "On the Ladder", "Complete 3 steps of your salary plan"),
+        Badge("impulse_tamer", "🧘", "Impulse Tamer", "Skip 3 things after their cooling-off on the wishlist"),
     )
 
     val challenges = listOf(
@@ -118,6 +119,8 @@ object Gamification {
         practicedDays: Set<Long> = emptySet(),
         /** Salary-plan steps the user marked done. */
         planStepsDone: Int = 0,
+        /** Wishlist items the user decided not to buy after the cooling-off period. */
+        wishesSkipped: Int = 0,
     ): GameState {
         fun bucket(t: Txn) = categories[t.categoryId]?.bucket ?: Bucket.WANT
         val byDate = txns.groupBy { it.date }
@@ -153,9 +156,11 @@ object Gamification {
         xp += challengesWon * 100
         xp += practicedDays.size * 15
         xp += planStepsDone * 40
+        xp += wishesSkipped * 30
 
         val earned = earnedBadges(txns, categories, goals, noSpendDays, challengesWon, budgetPaise, today, bestLog, bestLeakFree) +
-            listOfNotNull("habit_builder".takeIf { practicedDays.size >= 7 }, "plan_progress".takeIf { planStepsDone >= 3 })
+            listOfNotNull("habit_builder".takeIf { practicedDays.size >= 7 }, "plan_progress".takeIf { planStepsDone >= 3 },
+                "impulse_tamer".takeIf { wishesSkipped >= 3 })
         xp += earned.size * 50
 
         val level = levels.last { xp >= it.minXp }

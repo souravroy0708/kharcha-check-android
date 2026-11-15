@@ -26,7 +26,46 @@ object StatementParser {
         val ref: String = "",
     )
 
-    data class Result(val rows: List<Row>, val creditCard: Boolean)
+    data class Result(val rows: List<Row>, val creditCard: Boolean, val card: CardSummary? = null)
+
+    /** From a credit-card statement: when the bill is due, the total due and the minimum due. */
+    data class CardSummary(val dueDate: LocalDate?, val totalDuePaise: Long?, val minDuePaise: Long?)
+
+    private val DUE_LABEL = Regex("""payment\s*due\s*date|due\s*date""", RegexOption.IGNORE_CASE)
+    private val TOTAL_LABEL = Regex("""total\s*(amount\s*)?(due|dues|payable)|total\s*payment\s*due|amount\s*payable""", RegexOption.IGNORE_CASE)
+    private val MIN_LABEL = Regex("""min(imum)?\.?\s*(amount\s*)?(due|payable)""", RegexOption.IGNORE_CASE)
+
+    /**
+     * Reads the summary box of a card statement. Handles "Payment Due Date: 15 Dec 2026" on one line, and the
+     * common boxed layout where a row of labels is followed by a row of values in the same order.
+     */
+    fun cardSummary(lines: List<String>, hint: YearMonth = YearMonth.now()): CardSummary? {
+        var due: LocalDate? = null; var total: Long? = null; var min: Long? = null
+        fun dateIn(s: String): LocalDate? = listOf(D_NUM, D_NAMED, D_ISO).firstNotNullOfOrNull { rx -> rx.find(s)?.let { parseDateCell(it.value, hint) } }
+        fun amountsIn(s: String) = AMOUNT.findAll(stripDates(s)).mapNotNull { m -> money(m.value) }.toList()
+        for ((i, raw) in lines.withIndex()) {
+            val l = raw.trim()
+            val hasDue = DUE_LABEL.containsMatchIn(l); val hasTotal = TOTAL_LABEL.containsMatchIn(l); val hasMin = MIN_LABEL.containsMatchIn(l)
+            if (!hasDue && !hasTotal && !hasMin) continue
+            val labels = listOfNotNull(
+                DUE_LABEL.find(l)?.let { it.range.first to "due" }, TOTAL_LABEL.find(l)?.let { it.range.first to "total" }, MIN_LABEL.find(l)?.let { it.range.first to "min" },
+            ).sortedBy { it.first }.map { it.second }
+            val sameDate = dateIn(l); val sameAmts = amountsIn(l)
+            if (labels.size == 1 && (sameDate != null || sameAmts.isNotEmpty())) {
+                when (labels[0]) { "due" -> due = due ?: sameDate; "total" -> total = total ?: sameAmts.firstOrNull(); "min" -> min = min ?: sameAmts.firstOrNull() }
+                continue
+            }
+            // Labels row → values on the next line, in the same order (dates and amounts read separately).
+            val next = lines.getOrNull(i + 1)?.trim() ?: continue
+            val nd = dateIn(next); val na = amountsIn(next).toMutableList()
+            for (lab in labels) when (lab) {
+                "due" -> if (due == null) due = nd
+                "total" -> if (total == null && na.isNotEmpty()) total = na.removeAt(0)
+                "min" -> if (min == null && na.isNotEmpty()) min = na.removeAt(0)
+            }
+        }
+        return if (due == null && total == null) null else CardSummary(due, total, min)
+    }
 
     class NotReadableException(message: String) : Exception(message)
 

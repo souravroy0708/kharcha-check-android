@@ -226,6 +226,8 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
             else -> {
                 st.type = runCatching { TxType.valueOf(route.type) }.getOrDefault(TxType.EXPENSE)
                 if (route.categoryId > 0) st.categoryId = route.categoryId
+                if (route.amountPaise > 0) st.expr = route.amountPaise.let { if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(it / 100, it % 100) }
+                if (route.payee.isNotBlank()) st.payee = route.payee
             }
         }
         st.loaded = true
@@ -374,6 +376,15 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 }
             }
 
+            // "Your Money or Your Life": show wants and leaks as hours of the user's work.
+            run {
+                val bucket = data.catMap[st.categoryId]?.bucket
+                val amt = st.amountPaise ?: 0
+                val hrs = if (st.type == TxType.EXPENSE && (bucket == com.kharchacheck.app.core.model.Bucket.WANT || bucket == com.kharchacheck.app.core.model.Bucket.LEAK) && amt >= 100_00)
+                    com.kharchacheck.app.domain.Wishlist.lifeHours(amt, data.settings.monthlyIncomePaise, data.settings.workHoursPerMonth) else null
+                if (hrs != null) Text("⏱️ That's ${com.kharchacheck.app.domain.Wishlist.hoursLabel(hrs)}." + if (!editing && amt >= 1_000_00) " Not urgent? Park it on the wishlist first." else "",
+                    style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
+            }
             if (!editing && st.type == TxType.EXPENSE) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
                     .background(Kc.colors.card).clickable { st.splitOn = !st.splitOn }.padding(end = 12.dp)) {
@@ -529,7 +540,7 @@ private fun applyReceipt(st: EditTxnState, r: ReceiptParser.Result?, d: AppData)
     return "✨ Filled ${filled.joinToString(", ")} from the screenshot.$check$pending"
 }
 
-private fun ordinal(n: Int): String = n.toString() + when {
+fun ordinal(n: Int): String = n.toString() + when {
     n % 100 in 11..13 -> "th"
     n % 10 == 1 -> "st"
     n % 10 == 2 -> "nd"
