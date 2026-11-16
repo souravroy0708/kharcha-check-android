@@ -1,3 +1,5 @@
+> **Current step-by-step guide with all answers and store text: [PLAY_CONSOLE_GUIDE.md](PLAY_CONSOLE_GUIDE.md).** This file keeps background notes.
+
 # Publishing Kharcha Check on Google Play
 
 The app requests no sensitive permissions (no SMS, contacts or location), so review is quick.
