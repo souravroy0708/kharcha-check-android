@@ -68,11 +68,11 @@ jobs:
           echo "Checking: $m"
           [ -f "$m" ] || { echo "::error::Merged release manifest not found"; exit 1; }
           # Internet is allowed (AMFI fund prices). SMS, advertising IDs, location and contacts never are.
-          if grep -q 'READ_SMS"\|RECEIVE_SMS"\|SEND_SMS"' "$m"; then echo "::error::SMS permission found: the app must never read messages"; exit 1; fi
+          if grep -q 'READ_SMS"\|RECEIVE_SMS"\|SEND_SMS"\|RECEIVE_MMS"\|RECEIVE_WAP_PUSH"\|READ_CALL_LOG"\|WRITE_CALL_LOG"\|PROCESS_OUTGOING_CALLS"' "$m"; then echo "::error::SMS or call log permission found: the app must never read messages or calls"; exit 1; fi
           if grep -q 'AD_ID"' "$m"; then echo "::error::AD_ID found"; exit 1; fi
           if grep -q 'ACCESS_FINE_LOCATION"\|ACCESS_COARSE_LOCATION"\|READ_CONTACTS"' "$m"; then echo "::error::location or contacts permission found"; exit 1; fi
           grep -q 'cleartextTrafficPermitted\|networkSecurityConfig' "$m" || { echo "::error::HTTPS-only network config missing"; exit 1; }
-          echo "✓ No SMS, no ad id, no location/contacts, HTTPS-only."
+          echo "✓ No SMS, no call log, no ad id, no location/contacts, HTTPS-only."
 
       # Users have real data. A table change without a version bump + migration would crash the app on launch.
       - name: Database schema guard
