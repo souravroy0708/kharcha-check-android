@@ -21,6 +21,7 @@ leaks in your spending, turn the savings into investments, and make it a daily h
 | **Bills & due dates** | Credit cards, rent, electricity, insurance, EMIs with due day and amount. Reminders N days before, the day before, on the day and when a day late; "Mark paid"; upcoming bills on Home. |
 | **Kharcha Wrapped** | Spotify-Wrapped-style story for any month (Report) or the year so far (Trends): spend vs saved, #1 category, go-to payee, biggest day, leaks, no-spend days, and a money persona (The Saver, The Foodie, The Investor…). Each card shares as an image. |
 | **Quick Settings tile** | "Add expense" from the notification shade. |
+| **🎤 Voice entry** | Home → 🎤 Speak, or "Say it instead of typing" in the editor: "spent 450 on lunch with team at Paradise yesterday" fills amount, category, payee, note, payment mode and date (Indian number words, lakh/k, Hinglish like "kal 300 ka petrol"). Mic buttons also on payee, note, searches and names. Uses Android's built-in voice typing screen (`RecognizerIntent`): **no RECORD_AUDIO permission, no manifest change**; the app only receives text. Hidden automatically on phones without voice typing. |
 | **📘 Smart Money Guide** | *My salary plan:* needs / wants / save split for your take-home (savings % scales with income), compared with this month's actual; a money ladder in the right order (starter fund → health cover → term cover if someone depends on you → clear costly debt → 6-month fund → SIP → yearly step-up → yearly check-up) using your own EMIs and essentials; monthly SIP split by age and risk comfort; 10/20-year and step-up projections. *Investing:* the golden rules. *Online spend:* 24 app tricks (menu mark-ups, minimum-order traps, fake countdowns, no-cost EMI, BNPL, auto-renewing trials…) led by your own biggest online leak. |
 | **🔔 Daily money nudges (3 a day)** | 💰 8:30 am *invest with purpose* (salary-day "pay yourself first", goal SIP still due, money rescued from leaks, start-a-SIP), 🛑 1 pm *avoid unnecessary spending* (delivery orders this week, leaks vs your usual, wishlist ready, budget per day left, subscriptions), 💡 7:30 pm *saving trick* (no-spend day so far, tax room in Jan–Mar). Personal nudges first with per-type cooldowns; otherwise a unique item from the slot's own pool (60–90 items: 80 new India-specific tips + the 100 daily cards + online-spending tips + research cards), shuffled per install, no repeats within a cycle. Each slot can be turned off or re-timed; hidden entries never used; lock screen shows no amounts. Home's daily card keeps "✅ I did it" (+15 XP). |
 | **Statement import (v2 parser)** | From Home, Activity or "Open with" in Gmail/Drive. Digital PDFs are read **by column position** (every character's x/y): header detection (Date / Narration / Withdrawal / Deposit / Balance / Amount / Dr-Cr), right-aligned amounts snapped to their column, glued columns split, wrapped narrations joined, multi-page headers, newest-first or oldest-first, every row verified against the running balance. Up to 200 pages (a full year). Scanned pages fall back to OCR. |
@@ -68,6 +69,14 @@ SMS permission ever appears in the release manifest.
 How (all features kept): no x86 emulator libraries in release builds; native libraries compressed in
 downloadable APKs only (`-PcompressNativeLibs`); compressed OCR model; Bouncy Castle's unused post-quantum
 tables and PdfBox's Chinese/Japanese/Korean font maps excluded. Test builds (`smart-TEST`) keep x86 for emulators.
+
+## Website
+
+`docs/index.html` is the public website (static HTML, no build step). In the repo settings, set
+**Pages → Source: Deploy from a branch → `main` / `docs`**, and it goes live at
+`https://souravroy0708.github.io/kharcha-check-android/`. It follows the app's privacy rules: no cookies,
+no analytics, fonts and scripts served from the site itself, and a strict Content-Security-Policy.
+The "Try it" demo reads a pasted bank message entirely in the browser (`docs/assets/site.js`).
 
 ## Brand assets
 

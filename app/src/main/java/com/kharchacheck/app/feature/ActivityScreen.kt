@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
 import com.kharchacheck.app.core.model.Bucket
 import com.kharchacheck.app.core.model.Money
 import com.kharchacheck.app.core.model.ReviewState
@@ -137,6 +138,7 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
                 value = query, onValueChange = { query = it }, singleLine = true,
                 placeholder = { Text("Search payee, note, tag, category, amount", color = MutedOnInk) },
                 leadingIcon = { Icon(Icons.Rounded.Search, null, tint = MutedOnInk) },
+                trailingIcon = { MicButton("Search for a payee, note or category", tint = MutedOnInk) { query = it.trim().trimEnd('.', '?') } },
                 shape = RoundedCornerShape(16.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = Ink2, unfocusedContainerColor = Ink2, focusedBorderColor = Haldi, unfocusedBorderColor = InkLine,

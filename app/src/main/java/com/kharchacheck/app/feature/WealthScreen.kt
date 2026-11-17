@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.core.model.Money
 import com.kharchacheck.app.domain.AmfiNav
 import com.kharchacheck.app.domain.Holding
@@ -224,7 +226,8 @@ private fun HoldingDialog(vm: AppViewModel, existing: Holding?, schemes: List<Sc
                         chosen?.nav?.let { Text("NAV ₹$it on ${chosen?.date?.format(shortDate) ?: ""}", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted) }
                         Text("Change fund", style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted, modifier = Modifier.clickable { code = null; name = "" })
                     } else {
-                        OutlinedTextField(query, { query = it }, label = { Text("Search fund, e.g. parag flexi direct") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(query, { query = it }, label = { Text("Search fund, e.g. parag flexi direct") }, singleLine = true,
+                            trailingIcon = { MicButton("Say the fund name") { query = it.trim().trimEnd('.') } }, modifier = Modifier.fillMaxWidth())
                         if (schemes.isEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                             if (busy) { CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp); Spacer(Modifier.width(8.dp)) }
                             Text(if (busy) "Downloading the fund list…" else "Fund list not available. Check your connection and tap ↻ Update.",
@@ -240,7 +243,8 @@ private fun HoldingDialog(vm: AppViewModel, existing: Holding?, schemes: List<Sc
                     OutlinedTextField(units, { v -> units = v.filter { it.isDigit() || it == '.' }.take(14) }, label = { Text("Units held (from your statement or app)") },
                         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 } else {
-                    OutlinedTextField(name, { name = it.take(40) }, label = { Text("Name, e.g. SBI FD 2027") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    OutlinedTextField(name, { name = it.take(40) }, label = { Text("Name, e.g. SBI FD 2027") }, singleLine = true,
+                        trailingIcon = { MicButton("Name this investment") { name = spokenName(it, 40) } }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(value, { v -> value = v.filter(Char::isDigit).take(11) }, label = { Text("Current value") }, prefix = { Text("₹ ") },
                         singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 }
@@ -275,7 +279,8 @@ private fun NetItemDialog(existing: NetItem?, side0: NetSide, onDismiss: () -> U
                         Text(e, fontSize = 20.sp, modifier = Modifier.clip(RoundedCornerShape(50)).background(if (e == emoji) Haldi else Kc.colors.chip).clickable { emoji = e }.padding(6.dp))
                     }
                 }
-                OutlinedTextField(name, { name = it.take(30) }, label = { Text(if (side == NetSide.ASSET) "e.g. HDFC savings" else "e.g. Home loan") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(30) }, label = { Text(if (side == NetSide.ASSET) "e.g. HDFC savings" else "e.g. Home loan") }, singleLine = true,
+                    trailingIcon = { MicButton("Say the name") { name = spokenName(it, 30) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value, { v -> value = v.filter { it.isDigit() || it == '.' }.take(12) }, label = { Text(if (side == NetSide.ASSET) "Balance / value" else "Outstanding") },
                     prefix = { Text("₹ ") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 if (existing != null) TextButton(onClick = { onDelete(existing) }) { Text("Delete", color = Coral) }

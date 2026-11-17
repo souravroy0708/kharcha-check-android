@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -92,6 +93,7 @@ import com.kharchacheck.app.core.model.Worth
 import com.kharchacheck.app.domain.AmountExpression
 import com.kharchacheck.app.domain.Dues
 import com.kharchacheck.app.domain.InvestMath
+import com.kharchacheck.app.domain.VoiceEntry
 import com.kharchacheck.app.domain.read.ReceiptParser
 import com.kharchacheck.app.ui.AppData
 import com.kharchacheck.app.ui.AppViewModel
@@ -101,12 +103,17 @@ import com.kharchacheck.app.ui.components.AttachmentViewer
 import com.kharchacheck.app.ui.components.BigButton
 import com.kharchacheck.app.ui.components.CategoryIcon
 import com.kharchacheck.app.ui.components.Pill
+import com.kharchacheck.app.ui.components.MicButton
 import com.kharchacheck.app.ui.components.Segmented
+import com.kharchacheck.app.ui.components.appendSpoken
+import com.kharchacheck.app.ui.components.rememberVoiceInput
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.ui.nav.EditRoute
 import com.kharchacheck.app.ui.theme.Coral
 import com.kharchacheck.app.ui.theme.Haldi
 import com.kharchacheck.app.ui.theme.Ink
 import com.kharchacheck.app.ui.theme.Ink2
+import com.kharchacheck.app.ui.theme.InkLine
 import com.kharchacheck.app.ui.theme.Kc
 import com.kharchacheck.app.ui.theme.MutedOnInk
 import com.kharchacheck.app.ui.theme.color
@@ -228,6 +235,7 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 if (route.categoryId > 0) st.categoryId = route.categoryId
                 if (route.amountPaise > 0) st.expr = route.amountPaise.let { if (it % 100 == 0L) (it / 100).toString() else "%d.%02d".format(it / 100, it % 100) }
                 if (route.payee.isNotBlank()) st.payee = route.payee
+                if (route.spoken.isNotBlank()) st.readNote = applyVoice(st, route.spoken, data)
             }
         }
         st.loaded = true
@@ -293,6 +301,24 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 Text(if (AmountExpression.hasOperator(st.expr)) st.expr else if (st.keypad) "Tip: type 120+45 to add items" else "Tap to change amount",
                     style = MaterialTheme.typography.bodySmall, color = MutedOnInk, maxLines = 1)
             }
+            // Speak the whole entry: "250 for chai at Ramesh, by cash" fills amount, category, payee, note and mode.
+            if (!editing) {
+                val speakEntry = rememberVoiceInput("Say the amount and what it was for") { heard -> st.readNote = applyVoice(st, heard, data) }
+                if (speakEntry != null) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).border(1.dp, InkLine, RoundedCornerShape(50))
+                            .clickable(role = Role.Button, onClickLabel = "Speak this entry") { focus.clearFocus(); speakEntry() }
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Icon(Icons.Rounded.Mic, contentDescription = null, tint = Haldi)
+                        Column(Modifier.weight(1f)) {
+                            Text("Say it instead of typing", style = MaterialTheme.typography.labelLarge, color = Color.White)
+                            Text("e.g. “250 for chai at Ramesh, by cash”", style = MaterialTheme.typography.bodySmall, color = MutedOnInk, maxLines = 1)
+                        }
+                    }
+                }
+            }
         }
 
         // ---- Details ----
@@ -332,6 +358,13 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 value = st.payee, onValueChange = { st.payee = it.take(40) },
                 label = { Text(when (st.type) { TxType.INCOME -> "From (optional)"; TxType.TRANSFER -> "To / from (optional)"; else -> "Paid to / what for (optional)" }) },
                 singleLine = true, keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Next),
+                trailingIcon = {
+                    MicButton(if (st.type == TxType.INCOME) "Who paid you?" else "Who did you pay, or what for?") { heard ->
+                        st.keypad = false
+                        if (VoiceEntry.parse(heard).amountPaise != null) st.readNote = applyVoice(st, heard, data)
+                        else st.payee = spokenName(heard, 40)
+                    }
+                },
                 modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) st.keypad = false },
             )
             if (st.payee.isNotBlank() && selected != null) {
@@ -424,6 +457,7 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
 
             OutlinedTextField(st.note, { st.note = it.take(200) }, label = { Text("Note (optional)") },
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                trailingIcon = { MicButton("What was it for?") { heard -> st.keypad = false; st.note = appendSpoken(st.note, heard, 200) } },
                 modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) st.keypad = false })
             OutlinedTextField(st.tags, { st.tags = it.take(60) }, label = { Text("Tags (optional, e.g. trip-goa, office)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) st.keypad = false })
@@ -513,6 +547,46 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
         confirmButton = { TextButton(onClick = { st.original?.let(vm::delete); confirmDelete = false; close() }) { Text("Delete", color = Coral) } },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Keep") } },
     )
+}
+
+/**
+ * Fills the form from one spoken sentence (see [VoiceEntry]). On a new entry the spoken words win, because the user
+ * just said them; when editing a saved entry only empty fields are filled. Returns the note to show.
+ */
+private fun applyVoice(st: EditTxnState, heard: String, d: AppData): String {
+    val r = VoiceEntry.parse(heard)
+    val fresh = st.original == null
+    val filled = mutableListOf<String>()
+    if (r.amountPaise != null && (fresh || st.amountPaise == null)) { st.expr = st.plain(r.amountPaise); filled += "amount" }
+    // The category decides the type ("SIP" → Invest), unless the words said it outright ("received", "lent").
+    if (fresh || st.categoryId == 0L) {
+        val cat = r.categoryKey?.let { k -> d.activeCategories.firstOrNull { it.key == k && (r.type == null || it.bucket.type == r.type) } }
+        when {
+            cat != null -> {
+                if (cat.bucket.type != st.type) st.goalId = null
+                st.type = cat.bucket.type; st.categoryId = cat.id; filled += "category"
+            }
+            r.type != null && r.type != st.type -> { st.type = r.type; st.categoryId = 0; st.goalId = null }
+        }
+    }
+    if (r.payee.isNotBlank() && (fresh || st.payee.isBlank())) { st.payee = r.payee; filled += if (st.type == TxType.INCOME) "from" else "payee" }
+    if (r.note.isNotBlank() && !st.note.contains(r.note, ignoreCase = true)) { st.note = appendSpoken(st.note, r.note, 200); filled += "note" }
+    if (r.mode != null && (fresh || st.original?.mode == st.mode)) { st.mode = r.mode; filled += "payment mode" }
+    if (fresh && r.daysAgo > 0) {
+        st.epochMillis = withDate(st.epochMillis, LocalDate.now().minusDays(r.daysAgo.toLong()))
+        filled += if (r.daysAgo == 1) "date (yesterday)" else "date"
+    }
+    if ("amount" in filled) st.keypad = false
+    val quote = "“" + heard.take(80) + "”"
+    if (!r.foundSomething) {
+        return if (st.note.isBlank()) {
+            st.note = spokenName(heard, 200)
+            "🎤 Heard $quote. Couldn't find an amount, so it's kept as the note. Try e.g. “250 for chai at Ramesh”."
+        } else "🎤 Heard $quote but couldn't find an amount or category. Try e.g. “250 for chai at Ramesh”."
+    }
+    val missing = buildList { if (st.amountPaise == null) add("amount"); if (st.categoryId == 0L) add("category") }
+    val tail = if (missing.isEmpty()) " Check it, then Save." else " Now pick the ${missing.joinToString(" and ")}."
+    return "🎤 Heard $quote. Filled ${filled.joinToString(", ")}.$tail"
 }
 
 /** Fills only what's still empty, so a read never overwrites what the user typed. Returns a note to show. */
@@ -646,7 +720,8 @@ fun CategorySheet(list: List<Category>, selectedId: Long, onPick: (Category) -> 
     val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet, containerColor = Kc.colors.paper) {
         Column(Modifier.padding(horizontal = 16.dp)) {
-            OutlinedTextField(q, { q = it }, label = { Text("Search categories") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(q, { q = it }, label = { Text("Search categories") }, singleLine = true,
+                trailingIcon = { MicButton("Which category?") { q = it.trim().trimEnd('.') } }, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
         }
         val filtered = list.filter { q.isBlank() || it.name.contains(q.trim(), ignoreCase = true) }

@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.core.model.Bucket
 import com.kharchacheck.app.core.model.Goal
 import com.kharchacheck.app.core.model.Money
@@ -209,7 +211,8 @@ private fun PlanGoalDialog(existing: Goal?, plan: GoalPlan?, onDismiss: () -> Un
                         } }
                     }
                 }
-                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name, e.g. \"Riya's college\"") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name, e.g. \"Riya's college\"") }, singleLine = true,
+                    trailingIcon = { MicButton("Name this goal") { name = spokenName(it, 30) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(cost, { v -> cost = v.filter(Char::isDigit).take(10) }, label = { Text("What it costs today") }, prefix = { Text("₹ ") }, singleLine = true,
                     supportingText = { Text(kind.hint) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 if (kind.childGoal) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

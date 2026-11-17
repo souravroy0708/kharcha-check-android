@@ -29,6 +29,7 @@
 | Bills & due-date reminders | `domain/MoneyTools.kt` (`Bills`), `feature/ToolsScreens.kt`, `work/DailyWorker.kt` |
 | Kharcha Wrapped (month / year story, personas, image share) | `domain/Wrapped.kt`, `feature/WrappedScreen.kt` |
 | Quick Settings tile | `widget/QuickAddTile.kt` |
+| 🎤 Voice entry and mic on text fields (no mic permission) | `domain/VoiceEntry.kt`, `ui/components/VoiceInput.kt`, `feature/EditTxnScreen.kt` (`applyVoice`), `feature/HomeScreen.kt` |
 | Logo, themed icon, store graphics | `res/drawable/ic_launcher_*.xml`, `docs/store/` |
 | Wealth & net worth with daily AMFI NAVs | `domain/Wealth.kt`, `data/repo/WealthRepository.kt`, `feature/WealthScreen.kt`, `work/BackgroundWork.kt` (`NavRefreshWorker`) |
 | Automatic encrypted backup to a chosen folder (Drive) | `work/BackgroundWork.kt` (`AutoBackupWorker`), `data/security/SecretBox.kt`, `domain/Wealth.kt` (`BackupRotation`) |

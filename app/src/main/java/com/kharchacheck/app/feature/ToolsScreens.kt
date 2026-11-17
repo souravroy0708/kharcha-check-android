@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.core.model.Money
 import com.kharchacheck.app.domain.Bill
 import com.kharchacheck.app.domain.BillStatus
@@ -152,10 +154,12 @@ private fun DueDialog(existing: Due?, onDismiss: () -> Unit, onSave: (Due) -> Un
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Segmented(listOf("They owe me", "I owe them"), dir) { dir = it }
                 OutlinedTextField(person, { person = it.take(30) }, label = { Text("Name") }, singleLine = true,
+                    trailingIcon = { MicButton("Who is it?") { person = spokenName(it, 30) } },
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(amount, { v -> amount = v.filter { it.isDigit() || it == '.' }.take(10) }, label = { Text("Amount") }, prefix = { Text("₹ ") },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(note, { note = it.take(60) }, label = { Text("For what (optional)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(note, { note = it.take(60) }, label = { Text("For what (optional)") }, singleLine = true,
+                    trailingIcon = { MicButton("What was it for?") { note = spokenName(it, 60) } }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = { TextButton(enabled = person.isNotBlank() && paise != null, onClick = {
@@ -235,7 +239,8 @@ private fun BillDialog(existing: Bill?, onDismiss: () -> Unit, onDelete: () -> U
                             .clickable { emoji = e }.padding(6.dp))
                     }
                 }
-                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name, e.g. HDFC credit card") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name, e.g. HDFC credit card") }, singleLine = true,
+                    trailingIcon = { MicButton("Name this bill") { name = spokenName(it, 30) } }, modifier = Modifier.fillMaxWidth())
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(day, { v -> day = v.filter(Char::isDigit).take(2) }, label = { Text("Due day") }, singleLine = true, isError = day.isNotEmpty() && dueDay == null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f))

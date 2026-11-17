@@ -44,6 +44,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.core.model.Bucket
 import com.kharchacheck.app.core.model.Goal
 import com.kharchacheck.app.core.model.Money
@@ -392,7 +394,8 @@ private fun GoalDialog(existing: Goal?, onDismiss: () -> Unit, onDelete: (Long) 
         title = { Text(if (existing == null) "New goal" else "Edit goal") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Goal name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(30) }, label = { Text("Goal name") }, singleLine = true,
+                    trailingIcon = { MicButton("Name this goal") { name = spokenName(it, 30) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(target, { v -> target = v.filter { it.isDigit() }.take(10) }, label = { Text("Target amount") }, prefix = { Text("₹ ") },
                     singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 emojis.chunked(6).forEach { row ->

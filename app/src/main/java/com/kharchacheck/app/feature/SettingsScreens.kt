@@ -40,6 +40,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.BuildConfig
 import com.kharchacheck.app.core.model.Bucket
 import com.kharchacheck.app.core.model.Category
@@ -134,7 +136,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
         }
         item {
             KcCard(title = "Adding entries") {
-                Text("Fastest: tap the yellow +. Or import a bank statement, share a GPay / PhonePe screenshot, or copy a bank message and tap “Paste SMS” on Home. The app never reads your messages itself.",
+                Text("Fastest: tap the yellow +, or tap 🎤 and just say it: “250 for chai at Ramesh”. Or import a bank statement, share a GPay / PhonePe screenshot, or copy a bank message and tap “Paste SMS” on Home. The app never reads your messages itself.",
                     style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                 SwitchRow("✨ Auto-read screenshots & statements",
                     "Fills entries from GPay / PhonePe / Paytm screenshots and reads bank, card and UPI statements. A built-in offline engine does it on this phone; nothing is uploaded.",
@@ -303,6 +305,7 @@ fun PrivacyScreen(nav: NavHostController) {
             "🌐" to ("Internet only where it helps" to "Used only to download AMFI's public mutual fund prices (the whole list, so nobody learns what you hold) and to save backups to a folder you choose. Your entries are never sent to any server."),
             "🔐" to ("Encrypted on your phone" to "Your entries live in an AES-256 encrypted database. The key is held by your phone's secure hardware (Android Keystore)."),
             "🙅" to ("No account, no tracking" to "No sign-up, no analytics, no ads, no third-party SDKs that phone home. If the app crashes, you choose whether to email the report."),
+            "🎤" to ("Voice typing without a mic permission" to "The 🎤 buttons open your phone's own voice typing screen (usually Google), which asks to stay on the phone where it can. Kharcha Check never records audio, has no microphone permission, and only receives the words."),
             "☁️" to ("Backups you control" to "Android's automatic cloud backup is off. Turn on Automatic backup to save encrypted copies to a folder you pick, such as Google Drive."),
             "🧹" to ("You can erase it all" to "Settings → Delete everything wipes your data instantly. Uninstalling the app also removes it."),
         )
@@ -385,7 +388,8 @@ fun CategoryEditorDialog(existing: Category?, defaultBucket: Bucket, allowedBuck
         title = { Text(if (existing == null) "New category" else "Edit category") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(name, { name = it.take(32) }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(32) }, label = { Text("Name") }, singleLine = true,
+                    trailingIcon = { MicButton("Name this category") { name = spokenName(it, 32) } }, modifier = Modifier.fillMaxWidth())
                 if (allowedBuckets.size > 1) Segmented(allowedBuckets.map { it.label }, allowedBuckets.indexOf(bucket).coerceAtLeast(0)) { bucket = allowedBuckets[it] }
                 Text(bucket.blurb, style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                 emojis.chunked(8).forEach { row ->
@@ -480,7 +484,8 @@ fun RecurringScreen(vm: AppViewModel, nav: NavHostController) {
             onDismissRequest = { editingRule = null },
             title = { Text("Edit repeating entry") },
             text = { Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Name / payee") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Name / payee") }, singleLine = true,
+                    trailingIcon = { MicButton("Who is it paid to?") { payee = spokenName(it, 40) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(amt, { v -> amt = v.filter { it.isDigit() || it == '.' }.take(10) }, label = { Text("Amount") }, prefix = { Text("₹ ") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(day, { v -> day = v.filter(Char::isDigit).take(2) }, label = { Text("Day of month (1–31)") }, singleLine = true,

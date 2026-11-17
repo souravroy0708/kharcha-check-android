@@ -56,6 +56,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
+import com.kharchacheck.app.ui.components.appendSpoken
 import com.kharchacheck.app.container
 import com.kharchacheck.app.core.model.Attachment
 import com.kharchacheck.app.core.model.AttachmentKind
@@ -414,11 +417,13 @@ private fun RowEditDialog(item: ImportItem, onDismiss: () -> Unit, onSave: (Stri
                 Text(item.narration, style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 3)
                 if (item.txn.amountPaise == 0L) Text("The amount for this row couldn't be confirmed, so it was left blank instead of guessing. Check your statement and type it in.",
                     style = MaterialTheme.typography.bodySmall, color = Coral)
-                OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Payee / merchant") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(payee, { payee = it.take(40) }, label = { Text("Payee / merchant") }, singleLine = true,
+                    trailingIcon = { MicButton("Who was it paid to?") { payee = spokenName(it, 40) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(amount, { v -> amount = v.filter { it.isDigit() || it == '.' }.take(12) }, label = { Text("Amount") }, prefix = { Text("₹ ") },
                     singleLine = true, isError = paise == null, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
                 OutlinedButton(onClick = { picking = true }, modifier = Modifier.fillMaxWidth()) { Text("📅 " + LocalDate.ofEpochDay(date).format(dayFmt)) }
-                OutlinedTextField(note, { note = it.take(200) }, label = { Text("Note") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(note, { note = it.take(200) }, label = { Text("Note") },
+                    trailingIcon = { MicButton("What was it for?") { note = appendSpoken(note, it, 200) } }, modifier = Modifier.fillMaxWidth())
                 Text("To switch between spend, income or transfer, change the category (tap the icon).", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
             }
         },

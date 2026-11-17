@@ -24,6 +24,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import com.kharchacheck.app.ui.components.MicButton
+import com.kharchacheck.app.ui.components.spokenName
 import com.kharchacheck.app.core.model.Money
 import com.kharchacheck.app.domain.WishDecision
 import com.kharchacheck.app.domain.WishItem
@@ -139,7 +141,8 @@ private fun AddWishDialog(income: Long, hours: Int, onDismiss: () -> Unit, onAdd
         title = { Text("Park it on the wishlist") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(name, { name = it.take(40) }, label = { Text("What is it?") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(name, { name = it.take(40) }, label = { Text("What is it?") }, singleLine = true,
+                    trailingIcon = { MicButton("What do you want to buy?") { name = spokenName(it, 40) } }, modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(price, { v -> price = v.filter(Char::isDigit).take(8) }, label = { Text("Price, with delivery & fees") }, prefix = { Text("₹ ") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.fillMaxWidth())
                 if (paise > 0) {

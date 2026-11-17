@@ -125,7 +125,10 @@ fun TextDialog(title: String, initial: String, label: String, onDismiss: () -> U
     var text by rememberSaveable { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss, title = { Text(title) },
-        text = { OutlinedTextField(text, { text = it.take(60) }, label = { Text(label) }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+        text = {
+            OutlinedTextField(text, { text = it.take(60) }, label = { Text(label) }, singleLine = true,
+                trailingIcon = { MicButton(label) { text = spokenName(it, 60) } }, modifier = Modifier.fillMaxWidth())
+        },
         confirmButton = { TextButton(onClick = { onSave(text) }) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )

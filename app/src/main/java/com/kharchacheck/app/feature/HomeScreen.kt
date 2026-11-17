@@ -62,6 +62,7 @@ import com.kharchacheck.app.ui.components.SectionHeader
 import com.kharchacheck.app.ui.components.SpendRing
 import com.kharchacheck.app.ui.components.SplitBar
 import com.kharchacheck.app.ui.components.TxnRow
+import com.kharchacheck.app.ui.components.rememberVoiceInput
 import com.kharchacheck.app.ui.nav.ActivityRoute
 import com.kharchacheck.app.ui.nav.BillsRoute
 import com.kharchacheck.app.ui.nav.DuesRoute
@@ -162,7 +163,10 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Quick add", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text, modifier = Modifier.padding(horizontal = 20.dp))
+                // 🎤 Say "250 for chai at Ramesh": the editor opens filled in, nothing is saved until Save.
+                val speak = rememberVoiceInput("Say the amount and what it was for") { heard -> nav.navigate(EditRoute(spoken = heard)) }
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (speak != null) item { QuickChip("🎤", "Speak") { speak() } }
                     item {
                         QuickChip("📋", "Paste SMS") {
                             val text = platform.pasteFromClipboard()
@@ -311,7 +315,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             Box(Modifier.padding(horizontal = 16.dp)) {
                 KcCard {
                     Text("Your first entry takes 5 seconds", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
-                    Text("Tap the yellow + button, type the amount, pick a category. That's it. Or share any bank SMS to Kharcha Check.",
+                    Text("Tap the yellow + button, type the amount, pick a category. That's it. Or tap 🎤 Speak and just say it, like “250 for chai”.",
                         style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
                 }
             }
