@@ -149,12 +149,16 @@ sharing location, digital purchases, unrestricted internet access. Expected resu
 | Does your app collect or share any of the required user data types? | **Yes** |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** |
 | Do you provide a way for users to request that their data is deleted? | **Yes** (Settings → Delete everything; uninstalling; or email) |
-| Data types collected | **App info and performance → Crash logs** only |
+| Data types collected | **App info and performance → Crash logs**, and **Audio → Voice or sound recordings** (🎤 voice entry) |
 | Crash logs: collected / shared | Collected: **Yes** · Shared: **No** |
 | Processed ephemerally? | **No** |
 | Required or optional? | **Optional** (users choose to send the report) |
 | Purpose | **App functionality** |
+| Voice or sound recordings: collected / shared | Collected: **Yes** · Shared: **No** · Processed ephemerally: **Yes** · **Optional** · Purpose: **App functionality**. Safe answer: on phones without on-device recognition, Android's speech service (usually Google) converts the speech off the phone. The app never stores or uploads audio itself. |
 | Everything else (financial info, personal info, photos, files, location, contacts, messages…) | **Not collected.** Entries, statements and photos stay on the device, encrypted; backups go only to storage the user picks. The AMFI price download sends no user data. |
+
+### Permissions shown on the listing
+`RECORD_AUDIO` (microphone) is a normal runtime permission: **no Permissions declaration form** is needed (unlike SMS / call log). It is requested only when the user taps 🎤, after an in-app explanation.
 
 ### Government apps
 **No.**

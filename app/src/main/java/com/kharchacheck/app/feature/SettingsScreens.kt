@@ -305,7 +305,7 @@ fun PrivacyScreen(nav: NavHostController) {
             "🌐" to ("Internet only where it helps" to "Used only to download AMFI's public mutual fund prices (the whole list, so nobody learns what you hold) and to save backups to a folder you choose. Your entries are never sent to any server."),
             "🔐" to ("Encrypted on your phone" to "Your entries live in an AES-256 encrypted database. The key is held by your phone's secure hardware (Android Keystore)."),
             "🙅" to ("No account, no tracking" to "No sign-up, no analytics, no ads, no third-party SDKs that phone home. If the app crashes, you choose whether to email the report."),
-            "🎤" to ("Voice typing without a mic permission" to "The 🎤 buttons open your phone's own voice typing screen (usually Google), which asks to stay on the phone where it can. Kharcha Check never records audio, has no microphone permission, and only receives the words."),
+            "🎤" to ("Microphone only when you tap 🎤" to "Asked the first time you use voice entry, and on only while the listening sheet is open. On Android 12+ speech is turned into text on the phone where supported; otherwise your phone's speech service (usually Google) does it. Recordings are never saved or uploaded by Kharcha Check, only the words are used. Turn it off any time in App info → Permissions."),
             "☁️" to ("Backups you control" to "Android's automatic cloud backup is off. Turn on Automatic backup to save encrypted copies to a folder you pick, such as Google Drive."),
             "🧹" to ("You can erase it all" to "Settings → Delete everything wipes your data instantly. Uninstalling the app also removes it."),
         )

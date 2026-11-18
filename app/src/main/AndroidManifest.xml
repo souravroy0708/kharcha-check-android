@@ -22,6 +22,19 @@
     <!-- Optional: daily nudge and month-end report (asked for in context, never on first launch) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- 🎤 Voice entry. Asked only when the user taps a mic (with an explanation first); the mic is on only while
+         the listening sheet is open. Audio is never saved or uploaded by the app; only the recognised words are used. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Android 11+: lets the app see whether the phone has a speech service, to show setup help if it doesn't. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+    </queries>
 
     <application
         android:name=".KharchaApp"

@@ -71,10 +71,10 @@ jobs:
           if grep -q 'READ_SMS"\|RECEIVE_SMS"\|SEND_SMS"\|RECEIVE_MMS"\|RECEIVE_WAP_PUSH"\|READ_CALL_LOG"\|WRITE_CALL_LOG"\|PROCESS_OUTGOING_CALLS"' "$m"; then echo "::error::SMS or call log permission found: the app must never read messages or calls"; exit 1; fi
           if grep -q 'AD_ID"' "$m"; then echo "::error::AD_ID found"; exit 1; fi
           if grep -q 'ACCESS_FINE_LOCATION"\|ACCESS_COARSE_LOCATION"\|READ_CONTACTS"' "$m"; then echo "::error::location or contacts permission found"; exit 1; fi
-          # Voice typing goes through Android's own speech screen, so the app must never need the microphone.
-          if grep -q 'RECORD_AUDIO"' "$m"; then echo "::error::RECORD_AUDIO found: voice typing must use RecognizerIntent, not the mic"; exit 1; fi
+          # The mic is only for 🎤 voice entry, while the user is looking at it: never in the background.
+          if grep -q 'FOREGROUND_SERVICE_MICROPHONE"\|CAPTURE_AUDIO_OUTPUT"' "$m"; then echo "::error::background microphone permission found"; exit 1; fi
           grep -q 'cleartextTrafficPermitted\|networkSecurityConfig' "$m" || { echo "::error::HTTPS-only network config missing"; exit 1; }
-          echo "✓ No SMS, no call log, no mic, no ad id, no location/contacts, HTTPS-only."
+          echo "✓ No SMS, no call log, no background mic, no ad id, no location/contacts, HTTPS-only."
 
       # Users have real data. A table change without a version bump + migration would crash the app on launch.
       - name: Database schema guard
