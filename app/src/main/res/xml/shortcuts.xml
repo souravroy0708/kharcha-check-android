@@ -1,19 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Long-press the Kharcha Check icon: the three fastest ways in. -->
+<!-- Long-press the Kharcha Check icon. "Add expense" is published from MainActivity (dynamic), these two are static. -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
-    <shortcut
-        android:shortcutId="add_expense"
-        android:enabled="true"
-        android:icon="@drawable/ic_shortcut_add"
-        android:shortcutShortLabel="@string/shortcut_add_short"
-        android:shortcutLongLabel="@string/shortcut_add_long">
-        <intent
-            android:action="android.intent.action.VIEW"
-            android:targetPackage="com.kharchacheck.app"
-            android:targetClass="com.kharchacheck.app.MainActivity">
-            <extra android:name="open" android:value="add" />
-        </intent>
-    </shortcut>
     <shortcut
         android:shortcutId="speak_expense"
         android:enabled="true"
