@@ -7,7 +7,8 @@ Kharcha Check is free, with no ads and no premium plan.
 • Say it: "450 for lunch at Paradise yesterday" fills the whole entry
 • Long-press the app icon: Add expense, Speak it, Add income
 • Works fully offline; only fund prices need internet
-• NEW: Accounts & balances, Trips & events budgets, carry-over budgets
+• NEW: Trips: one-line spends, settle up as a couple, bookings and a photo diary
+• NEW: Accounts & balances, carry-over budgets
 • Settings → Storage and Settings → Voice entry setup
 • No SMS reading. Everything stays encrypted on your phone.
 ```
@@ -31,6 +32,7 @@ Kharcha Check is free, with no ads and no premium plan.
 ## New in this release (premium features, free)
 
 - **Accounts & balances**: bank, cash, credit cards (shows what you owe), wallets; transfers move money between them; old entries can be linked in one tap.
+- **Trip page**: every booking and cost line item (several trains, flights, hotel, cabs, tickets) with PNR, seats, times and for whom; places by day; who's going and cost per person; a photo diary of memorable moments; share the whole trip as text. "Add to expenses" records a booking once, so nothing is counted twice.
 - **Trips & events**: their own budget, entries tagged automatically while the trip is on, "₹X a day left", amounts typed in a foreign currency at your own rate.
 - **Carry-over budgets** and a **weekly pace** line per category.
 

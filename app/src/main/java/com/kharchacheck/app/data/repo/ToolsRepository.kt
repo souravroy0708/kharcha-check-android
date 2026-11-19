@@ -7,6 +7,10 @@ import androidx.room.withTransaction
 import com.kharchacheck.app.domain.Account
 import com.kharchacheck.app.domain.Bill
 import com.kharchacheck.app.domain.Trip
+import com.kharchacheck.app.domain.TripItem
+import com.kharchacheck.app.domain.TripPlace
+import com.kharchacheck.app.domain.TripPerson
+import com.kharchacheck.app.domain.DiaryEntry
 import com.kharchacheck.app.domain.Due
 import com.kharchacheck.app.domain.DueDirection
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +50,28 @@ class ToolsRepository(private val db: KharchaDatabase) {
 
     // ---- Trips & events ----
     val trips: Flow<List<Trip>> = db.trips().observe().map { l -> l.map { it.toModel() } }
-    suspend fun saveTrip(t: Trip) { db.trips().upsert(t.toEntity()) }
-    suspend fun deleteTrip(id: Long) = db.trips().delete(id)
+    suspend fun saveTrip(t: Trip): Long { val e = t.toEntity(); return db.trips().upsert(e).let { if (e.id != 0L) e.id else it } }
+
+    /** Deletes the trip and its bookings, places, people and diary. Expense entries stay. Returns diary photo ids to remove. */
+    suspend fun deleteTrip(id: Long): List<Long> = db.withTransaction {
+        val photos = db.tripPlan().allDiary().filter { it.tripId == id }.flatMap { d -> d.photoIds.split(',').mapNotNull { it.trim().toLongOrNull() } }
+        db.tripPlan().deleteItemsOf(id); db.tripPlan().deletePlacesOf(id); db.tripPlan().deletePeopleOf(id); db.tripPlan().deleteDiaryOf(id)
+        db.trips().delete(id)
+        photos
+    }
+
+    // ---- Trip details ----
+    val tripItems: Flow<List<TripItem>> = db.tripPlan().items().map { l -> l.map { it.toModel() } }
+    val tripPlaces: Flow<List<TripPlace>> = db.tripPlan().places().map { l -> l.map { it.toModel() } }
+    val tripPeople: Flow<List<TripPerson>> = db.tripPlan().people().map { l -> l.map { it.toModel() } }
+    val tripDiary: Flow<List<DiaryEntry>> = db.tripPlan().diary().map { l -> l.map { it.toModel() } }
+
+    suspend fun saveTripItem(i: TripItem): Long { val e = i.toEntity(); return db.tripPlan().upsertItem(e).let { if (e.id != 0L) e.id else it } }
+    suspend fun deleteTripItem(id: Long) = db.tripPlan().deleteItem(id)
+    suspend fun saveTripPlace(p: TripPlace) { db.tripPlan().upsertPlace(p.toEntity()) }
+    suspend fun deleteTripPlace(id: Long) = db.tripPlan().deletePlace(id)
+    suspend fun saveTripPerson(p: TripPerson) { db.tripPlan().upsertPerson(p.toEntity()) }
+    suspend fun deleteTripPerson(id: Long) = db.tripPlan().deletePerson(id)
+    suspend fun saveDiary(d: DiaryEntry) { db.tripPlan().upsertDiary(d.toEntity()) }
+    suspend fun deleteDiary(id: Long) = db.tripPlan().deleteDiary(id)
 }

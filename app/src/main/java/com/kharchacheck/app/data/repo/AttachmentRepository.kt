@@ -30,6 +30,17 @@ class AttachmentRepository(private val db: KharchaDatabase, private val vault: F
         return a.copy(id = db.attachments().insert(a.toEntity()))
     }
 
+    /** A photo for a trip diary: shrunk to WebP and encrypted like everything else. */
+    suspend fun addTripPhoto(uri: Uri): Attachment {
+        val s = vault.import(uri, maxMb = 20)
+        val a = Attachment(kind = AttachmentKind.TRIP_PHOTO, mime = s.mime, fileName = s.fileName, originalName = s.originalName, sizeBytes = s.sizeBytes)
+        return a.copy(id = db.attachments().insert(a.toEntity()))
+    }
+
+    suspend fun removeById(id: Long) {
+        db.attachments().all().firstOrNull { it.id == id }?.let { db.attachments().delete(it.id); vault.delete(it.fileName) }
+    }
+
     suspend fun link(ids: List<Long>, txnId: Long) { if (ids.isNotEmpty()) db.attachments().link(ids, txnId) }
 
     suspend fun setKind(a: Attachment, kind: AttachmentKind, month: YearMonth?) = db.attachments().setKind(a.id, kind.name, month?.toString())
@@ -68,7 +79,7 @@ class AttachmentRepository(private val db: KharchaDatabase, private val vault: F
 
     /** Removes statement files (PDF / Excel) added before [before]. The entries read from them stay. Returns how many. */
     suspend fun removeStatementFilesBefore(before: Long): Int {
-        val old = db.attachments().all().filter { it.kind != "RECEIPT" && it.kind != "OTHER" && it.createdAt < before }
+        val old = db.attachments().all().filter { it.kind != "RECEIPT" && it.kind != "OTHER" && it.kind != "TRIP_PHOTO" && it.createdAt < before }
         old.forEach { db.attachments().delete(it.id); vault.delete(it.fileName) }
         return old.size
     }

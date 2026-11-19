@@ -145,9 +145,11 @@ enum class AttachmentKind(val label: String, val emoji: String) {
     BANK_STATEMENT("Bank statement", "🏦"),
     CARD_STATEMENT("Credit card statement", "💳"),
     UPI_STATEMENT("UPI app statement", "📱"),
-    OTHER("Other document", "📄");
+    OTHER("Other document", "📄"),
+    /** Photos in a trip diary. Never cleaned up as orphans, never counted as statements. */
+    TRIP_PHOTO("Trip photo", "📸");
 
-    val isStatement: Boolean get() = this != RECEIPT
+    val isStatement: Boolean get() = this != RECEIPT && this != TRIP_PHOTO
 }
 
 data class Attachment(

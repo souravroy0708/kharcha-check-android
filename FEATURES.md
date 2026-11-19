@@ -35,6 +35,8 @@
 | Free forever card (rate / share) | `feature/SettingsScreens.kt` |
 | Accounts & balances (bank, cash, cards owed, wallets; transfers between them; link old entries in one tap) | `domain/Accounts.kt`, `feature/AccountsTripsScreens.kt` |
 | Trips & events budgets (auto-tag while on, per-day left, foreign currency at your own rate) | `domain/Trips.kt`, `feature/AccountsTripsScreens.kt` |
+| Trip spend log in one line ("240 chai at the beach", typed or spoken), reference-only unless added to expenses; settle up for couples/groups (who paid, equal shares, fewest payments); spend by day; Memories screen and "On this day" on Home | `domain/TripPlan.kt`, `feature/TripDetailScreen.kt` |
+| Trip page: bookings & cost line items (multiple trains/flights/stays, PNR, seats, times, for whom), "Add to expenses" without double counting, places by day, people & cost per person, photo diary, share as text | `domain/TripPlan.kt`, `feature/TripDetailScreen.kt` |
 | Carry-over budgets and weekly pace per category | `domain/BudgetRollover.kt`, `feature/SettingsScreens.kt` |
 | 🎤 Voice entry and mic on text fields (guided mic permission, in-app listening sheet) | `domain/VoiceEntry.kt`, `ui/components/VoiceInput.kt`, `feature/EditTxnScreen.kt` (`applyVoice`), `feature/HomeScreen.kt` |
 | Logo, themed icon, store graphics | `res/drawable/ic_launcher_*.xml`, `docs/store/` |

@@ -97,6 +97,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     val duesList by vm.dues.collectAsStateWithLifecycle()
     val accountsList by vm.accounts.collectAsStateWithLifecycle()
     val tripsList by vm.trips.collectAsStateWithLifecycle()
+    val diaryList by vm.tripDiary.collectAsStateWithLifecycle()
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -184,6 +185,16 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
                     item { QuickChip("📄", "Statement") { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) } }
                     items(quick, key = { it.id }) { c -> QuickChip(c.emoji, c.name.substringBefore(" (").substringBefore(" &")) { nav.navigate(EditRoute(type = c.bucket.type.name, categoryId = c.id)) } }
                 }
+            }
+        }
+
+        // "On this day": a trip moment from the same date in an earlier year.
+        val memory = com.kharchacheck.app.domain.TripPlan.onThisDay(diaryList, java.time.LocalDate.now()).firstOrNull()
+        if (memory != null) item {
+            KcCard(Modifier.padding(horizontal = 16.dp), onClick = { nav.navigate(com.kharchacheck.app.ui.nav.MemoriesRoute) }, padding = 14.dp) {
+                val years = java.time.LocalDate.now().year - memory.day.year
+                Text("📸 On this day, $years year${if (years > 1) "s" else ""} ago", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                Text("${memory.mood} ${memory.title.ifBlank { memory.place.ifBlank { "A trip moment" } }}", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
             }
         }
 

@@ -95,6 +95,50 @@ data class TripEntity(
     val endDay: Long,
     val currency: String,
     val ratePaise: Long,
+    @ColumnInfo(defaultValue = "") val destination: String = "",
+    @ColumnInfo(defaultValue = "") val notes: String = "",
+)
+
+/** v4: a booking or cost line item of a trip (several trains, a flight, the hotel…). kind = [TRIP_ITEM_KINDS] code. */
+@Entity(tableName = "trip_items", indices = [Index("tripId")])
+data class TripItemEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val tripId: Long,
+    val kind: Int,
+    val title: String,
+    val fromPlace: String,
+    val toPlace: String,
+    /** epoch millis; 0 = not set. */
+    val startAt: Long,
+    val endAt: Long,
+    val refNo: String,
+    val details: String,
+    val travellers: String,
+    val costPaise: Long,
+    val paid: Boolean,
+    val txnId: Long?,
+    val note: String,
+    /** v5: who paid, for settling up between travellers. */
+    @ColumnInfo(defaultValue = "") val paidBy: String = "",
+)
+
+/** v4: a place on the trip. day = epoch day, -1 = no day. */
+@Entity(tableName = "trip_places", indices = [Index("tripId")])
+data class TripPlaceEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val tripId: Long, val name: String, val day: Long, val note: String, val visited: Boolean, val sortOrder: Int,
+)
+
+/** v4: who's going. */
+@Entity(tableName = "trip_people", indices = [Index("tripId")])
+data class TripPersonEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val tripId: Long, val name: String, val note: String)
+
+/** v4: a diary entry. photoIds = comma-separated attachment ids (kind TRIP_PHOTO). */
+@Entity(tableName = "trip_diary", indices = [Index("tripId")])
+data class TripDiaryEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val tripId: Long, val day: Long, val mood: String, val title: String, val body: String, val place: String,
+    val photoIds: String, val createdAt: Long,
 )
 
 @Entity(tableName = "goals")
@@ -240,8 +284,33 @@ fun AccountEntity.toModel() = com.kharchacheck.app.domain.Account(id, name, emoj
     Codes.of(ACCOUNT_KINDS, kind, com.kharchacheck.app.domain.AccountKind.BANK), openingPaise, archived, sortOrder)
 fun com.kharchacheck.app.domain.Account.toEntity() = AccountEntity(id, name.trim(), emoji, Codes.code(ACCOUNT_KINDS, kind), openingPaise, archived, sortOrder)
 
-fun TripEntity.toModel() = com.kharchacheck.app.domain.Trip(id, name, emoji, tag, budgetPaise, LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay), currency, ratePaise)
-fun com.kharchacheck.app.domain.Trip.toEntity() = TripEntity(id, name.trim(), emoji, tag, budgetPaise, start.toEpochDay(), end.toEpochDay(), currency, ratePaise)
+fun TripEntity.toModel() = com.kharchacheck.app.domain.Trip(id, name, emoji, tag, budgetPaise, LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay), currency, ratePaise, destination, notes)
+fun com.kharchacheck.app.domain.Trip.toEntity() = TripEntity(id, name.trim(), emoji, tag, budgetPaise, start.toEpochDay(), end.toEpochDay(), currency, ratePaise, destination.trim(), notes.trim())
+
+/** Trip item kinds as codes. Append only. */
+val TRIP_ITEM_KINDS = com.kharchacheck.app.domain.TripItemKind.let { _ ->
+    listOf(
+        com.kharchacheck.app.domain.TripItemKind.TRAIN, com.kharchacheck.app.domain.TripItemKind.FLIGHT, com.kharchacheck.app.domain.TripItemKind.BUS,
+        com.kharchacheck.app.domain.TripItemKind.CAB, com.kharchacheck.app.domain.TripItemKind.STAY, com.kharchacheck.app.domain.TripItemKind.FOOD,
+        com.kharchacheck.app.domain.TripItemKind.ACTIVITY, com.kharchacheck.app.domain.TripItemKind.SHOPPING, com.kharchacheck.app.domain.TripItemKind.OTHER,
+    )
+}
+
+fun TripItemEntity.toModel() = com.kharchacheck.app.domain.TripItem(id, tripId, Codes.of(TRIP_ITEM_KINDS, kind, com.kharchacheck.app.domain.TripItemKind.OTHER),
+    title, fromPlace, toPlace, startAt.takeIf { it > 0 }, endAt.takeIf { it > 0 }, refNo, details, travellers, costPaise, paid, txnId, note, paidBy)
+fun com.kharchacheck.app.domain.TripItem.toEntity() = TripItemEntity(id, tripId, Codes.code(TRIP_ITEM_KINDS, kind), title.trim(), from.trim(), to.trim(),
+    startAt ?: 0L, endAt ?: 0L, refNo.trim(), details.trim(), travellers.trim(), costPaise, paid, txnId, note.trim(), paidBy.trim())
+
+fun TripPlaceEntity.toModel() = com.kharchacheck.app.domain.TripPlace(id, tripId, name, day.takeIf { it >= 0 }?.let { LocalDate.ofEpochDay(it) }, note, visited, sortOrder)
+fun com.kharchacheck.app.domain.TripPlace.toEntity() = TripPlaceEntity(id, tripId, name.trim(), day?.toEpochDay() ?: -1L, note.trim(), visited, sortOrder)
+
+fun TripPersonEntity.toModel() = com.kharchacheck.app.domain.TripPerson(id, tripId, name, note)
+fun com.kharchacheck.app.domain.TripPerson.toEntity() = TripPersonEntity(id, tripId, name.trim(), note.trim())
+
+fun TripDiaryEntity.toModel() = com.kharchacheck.app.domain.DiaryEntry(id, tripId, LocalDate.ofEpochDay(day), mood, title, body, place,
+    photoIds.split(',').mapNotNull { it.trim().toLongOrNull() }, createdAt)
+fun com.kharchacheck.app.domain.DiaryEntry.toEntity() = TripDiaryEntity(id, tripId, day.toEpochDay(), mood, title.trim(), body.trim(), place.trim(),
+    photoIds.joinToString(","), createdAt)
 
 fun GoalEntity.toModel() = Goal(id, name, emoji, targetPaise, savedPaise, targetEpochDay?.let(LocalDate::ofEpochDay), archived)
 fun Goal.toEntity() = GoalEntity(id, name, emoji, targetPaise, savedPaise, targetDate?.toEpochDay(), archived)

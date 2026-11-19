@@ -164,3 +164,42 @@ interface TripDao {
     @Query("DELETE FROM trips WHERE id = :id") suspend fun delete(id: Long)
     @Query("DELETE FROM trips") suspend fun clear()
 }
+
+/** Trip details: bookings / cost items, places, people and diary. Small tables, observed whole. */
+@Dao
+interface TripPlanDao {
+    @Query("SELECT * FROM trip_items") fun items(): Flow<List<TripItemEntity>>
+    @Query("SELECT * FROM trip_places ORDER BY sortOrder, id") fun places(): Flow<List<TripPlaceEntity>>
+    @Query("SELECT * FROM trip_people ORDER BY id") fun people(): Flow<List<TripPersonEntity>>
+    @Query("SELECT * FROM trip_diary ORDER BY day DESC, createdAt DESC") fun diary(): Flow<List<TripDiaryEntity>>
+
+    @Query("SELECT * FROM trip_items") suspend fun allItems(): List<TripItemEntity>
+    @Query("SELECT * FROM trip_places") suspend fun allPlaces(): List<TripPlaceEntity>
+    @Query("SELECT * FROM trip_people") suspend fun allPeople(): List<TripPersonEntity>
+    @Query("SELECT * FROM trip_diary") suspend fun allDiary(): List<TripDiaryEntity>
+
+    @Upsert suspend fun upsertItem(e: TripItemEntity): Long
+    @Upsert suspend fun upsertPlace(e: TripPlaceEntity): Long
+    @Upsert suspend fun upsertPerson(e: TripPersonEntity): Long
+    @Upsert suspend fun upsertDiary(e: TripDiaryEntity): Long
+
+    @Query("DELETE FROM trip_items WHERE id = :id") suspend fun deleteItem(id: Long)
+    @Query("DELETE FROM trip_places WHERE id = :id") suspend fun deletePlace(id: Long)
+    @Query("DELETE FROM trip_people WHERE id = :id") suspend fun deletePerson(id: Long)
+    @Query("DELETE FROM trip_diary WHERE id = :id") suspend fun deleteDiary(id: Long)
+
+    @Query("DELETE FROM trip_items WHERE tripId = :tripId") suspend fun deleteItemsOf(tripId: Long)
+    @Query("DELETE FROM trip_places WHERE tripId = :tripId") suspend fun deletePlacesOf(tripId: Long)
+    @Query("DELETE FROM trip_people WHERE tripId = :tripId") suspend fun deletePeopleOf(tripId: Long)
+    @Query("DELETE FROM trip_diary WHERE tripId = :tripId") suspend fun deleteDiaryOf(tripId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertItems(l: List<TripItemEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPlaces(l: List<TripPlaceEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertPeople(l: List<TripPersonEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertDiary(l: List<TripDiaryEntity>)
+
+    @Query("DELETE FROM trip_items") suspend fun clearItems()
+    @Query("DELETE FROM trip_places") suspend fun clearPlaces()
+    @Query("DELETE FROM trip_people") suspend fun clearPeople()
+    @Query("DELETE FROM trip_diary") suspend fun clearDiary()
+}

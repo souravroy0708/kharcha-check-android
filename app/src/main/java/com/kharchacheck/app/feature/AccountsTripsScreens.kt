@@ -218,12 +218,24 @@ fun TripsScreen(vm: AppViewModel, nav: NavHostController) {
     val fmt = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
 
     SubScreen("Trips & events", onBack = { nav.popBackStack() }) {
+        if (trips.isNotEmpty()) item {
+            KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.MemoriesRoute) }, padding = 14.dp) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📸", fontSize = 26.sp); Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Memories", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("Every trip with its photos, moments and what it cost", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                }
+            }
+        }
         item {
             Text("Give a trip, wedding, festival or house move its own budget. While it's on, new entries are tagged to it automatically (you can untick it), and they still count in your monthly reports.",
                 style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
         }
         if (trips.isEmpty()) item {
-            EmptyState("✈️", "No trips or events yet", "Planning Goa in December, a wedding, or Diwali shopping? Set a budget and see what's left per day.",
+            EmptyState("✈️", "No trips or events yet", "Planning Goa in December, a wedding, or Diwali shopping? Keep every ticket and booking, where you're going, who's coming and a diary of the best moments, all in one place.",
                 "Add a trip or event") { editing = newTrip(today) }
         }
         items(trips.size) { i ->
@@ -231,12 +243,13 @@ fun TripsScreen(vm: AppViewModel, nav: NavHostController) {
             val spent = Trips.spent(t, data.allTxns)
             val count = data.allTxns.count { Trips.hasTag(it, t.tag) }
             val over = t.budgetPaise in 1 until spent
-            KcCard(onClick = { editing = t }) {
+            KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.TripRoute(t.id)) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t.emoji, fontSize = 30.sp); Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(t.name, style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
-                        val status = when { t.isOn(today) -> "On now"; today.isBefore(t.start) -> "Starts ${t.start.format(fmt)}"; else -> "Ended" }
+                        Text(t.name + if (t.destination.isNotBlank() && !t.name.contains(t.destination, true)) " · ${t.destination}" else "",
+                            style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        val status = com.kharchacheck.app.domain.TripPlan.status(t, today)
                         Text("${t.start.format(fmt)} – ${t.end.format(fmt)} · $status · $count entries" + if (t.foreign) " · ${t.currency}" else "",
                             style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     }
@@ -254,14 +267,16 @@ fun TripsScreen(vm: AppViewModel, nav: NavHostController) {
 
     editing?.let { t ->
         TripDialog(t, taken = trips.filter { it.id != t.id }.map { it.tag }.toSet(),
-            onDismiss = { editing = null }, onSave = { vm.saveTrip(it); editing = null }, onDelete = { vm.deleteTrip(t); editing = null })
+            onDismiss = { editing = null },
+            onSave = { saved -> editing = null; vm.saveTrip(saved) { id -> if (saved.id == 0L) nav.navigate(com.kharchacheck.app.ui.nav.TripRoute(id)) } },
+            onDelete = { vm.deleteTrip(t); editing = null })
     }
 }
 
 private fun newTrip(today: LocalDate) = Trip(name = "", emoji = "✈️", tag = "", budgetPaise = 0, start = today, end = today.plusDays(3))
 
 @Composable
-private fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSave: (Trip) -> Unit, onDelete: () -> Unit) {
+internal fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSave: (Trip) -> Unit, onDelete: () -> Unit) {
     var name by rememberSaveable { mutableStateOf(t.name) }
     var emoji by rememberSaveable { mutableStateOf(t.emoji) }
     var budget by rememberSaveable { mutableStateOf(if (t.budgetPaise > 0) (t.budgetPaise / 100).toString() else "") }
@@ -269,6 +284,8 @@ private fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSav
     var end by rememberSaveable { mutableStateOf(t.end.toEpochDay()) }
     var currency by rememberSaveable { mutableStateOf(t.currency) }
     var rate by rememberSaveable { mutableStateOf(if (t.foreign) "%.2f".format(Locale.ENGLISH, t.ratePaise / 100.0) else "") }
+    var destination by rememberSaveable { mutableStateOf(t.destination) }
+    var notes by rememberSaveable { mutableStateOf(t.notes) }
     var pickDates by remember { mutableStateOf(false) }
     val fmt = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
     val foreign = currency.length == 3 && currency != "INR"
@@ -282,6 +299,8 @@ private fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSav
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedTextField(name, { name = it.take(30) }, label = { Text("Name, e.g. Goa trip, Riya's wedding") }, singleLine = true,
                     trailingIcon = { MicButton("Name the trip or event") { name = spokenName(it, 30) } }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(destination, { destination = it.take(40) }, label = { Text("Where to? e.g. Goa, Shimla & Manali") }, singleLine = true,
+                    trailingIcon = { MicButton("Where are you going?") { destination = spokenName(it, 40) } }, modifier = Modifier.fillMaxWidth())
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(listOf("✈️", "🏖️", "🏔️", "🚗", "💍", "🎉", "🪔", "🏠", "🎓", "🏕️")) { e ->
                         Pill(e, if (e == emoji) Haldi else Kc.colors.chip, Ink) { emoji = e }
@@ -301,7 +320,9 @@ private fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSav
                 if (foreign) OutlinedTextField(rate, { v -> rate = v.filter { it.isDigit() || it == '.' }.take(8) }, singleLine = true,
                     label = { Text("₹ for 1 $currency (your rate)") }, prefix = { Text("₹ ") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = Modifier.fillMaxWidth())
-                if (t.id != 0L) Pill("Delete", Kc.colors.warnBg, Coral) { onDelete() }
+                OutlinedTextField(notes, { notes = it.take(500) }, label = { Text("Notes (hotel address, packing list…)") }, minLines = 2,
+                    trailingIcon = { MicButton("Add a note") { notes = com.kharchacheck.app.ui.components.appendSpoken(notes, it, 500) } }, modifier = Modifier.fillMaxWidth())
+                if (t.id != 0L) Pill("Delete trip and its details", Kc.colors.warnBg, Coral) { onDelete() }
             }
         },
         confirmButton = {
@@ -310,6 +331,7 @@ private fun TripDialog(t: Trip, taken: Set<String>, onDismiss: () -> Unit, onSav
                     name = name.trim(), emoji = emoji, tag = t.tag.ifBlank { Trips.tagFor(name, taken) },
                     budgetPaise = Money.parse(budget) ?: 0L, start = LocalDate.ofEpochDay(start), end = LocalDate.ofEpochDay(end),
                     currency = if (foreign) currency else "INR", ratePaise = if (foreign) ratePaise ?: 100 else 100,
+                    destination = destination.trim(), notes = notes.trim(),
                 ))
             }) { Text("Save") }
         },

@@ -15,6 +15,8 @@ import kotlinx.serialization.Serializable
 @Serializable object VoiceSetupRoute
 @Serializable object AccountsRoute
 @Serializable object TripsRoute
+@Serializable data class TripRoute(val id: Long)
+@Serializable object MemoriesRoute
 @Serializable object RecurringRoute
 @Serializable data class StatementsRoute(val month: String = "")
 @Serializable data class ImportRoute(val attachmentId: Long)

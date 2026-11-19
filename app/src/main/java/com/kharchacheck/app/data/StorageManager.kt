@@ -43,8 +43,8 @@ class StorageManager(
         Usage(
             databaseBytes = databaseBytes(),
             filesBytes = files.vaultBytes(),
-            receipts = all.count { it.kind == "RECEIPT" || it.kind == "OTHER" },
-            statements = all.count { it.kind != "RECEIPT" && it.kind != "OTHER" },
+            receipts = all.count { it.kind == "RECEIPT" || it.kind == "OTHER" || it.kind == "TRIP_PHOTO" },
+            statements = all.count { it.kind != "RECEIPT" && it.kind != "OTHER" && it.kind != "TRIP_PHOTO" },
             pricesBytes = wealth.cacheBytes,
             readerBytes = sizeOf(File(context.noBackupFilesDir, "tesseract")),
             tempBytes = sizeOf(context.cacheDir),

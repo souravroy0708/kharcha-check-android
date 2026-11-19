@@ -193,6 +193,7 @@ class FinanceRepository(private val db: KharchaDatabase) {
         db.txns().clear(); db.budgets().clear(); db.goals().clear(); db.rules().clear(); db.recurring().clear(); db.dues().clear(); db.bills().clear()
         db.wealth().clearHoldings(); db.wealth().clearItems(); db.wealth().clearSnapshots(); db.categories().clear()
         db.accounts().clear(); db.trips().clear()
+        db.tripPlan().clearItems(); db.tripPlan().clearPlaces(); db.tripPlan().clearPeople(); db.tripPlan().clearDiary()
     }
 
     internal val database: KharchaDatabase get() = db

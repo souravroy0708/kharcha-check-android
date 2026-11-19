@@ -171,6 +171,7 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 "voice_setup" -> nav.navigate(VoiceSetupRoute)
                 "accounts" -> nav.navigate(AccountsRoute)
                 "trips" -> nav.navigate(TripsRoute)
+                "memories" -> nav.navigate(com.kharchacheck.app.ui.nav.MemoriesRoute)
                 "draft" -> nav.navigate(EditRoute(fromDraft = true))
                 "inbox" -> nav.navigate(InboxRoute)
                 "report" -> nav.openTab(ReportRoute)
@@ -249,6 +250,8 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<VoiceSetupRoute> { VoiceSetupScreen(vm, nav) }
                 composable<AccountsRoute> { AccountsScreen(vm, nav) }
                 composable<TripsRoute> { TripsScreen(vm, nav) }
+                composable<com.kharchacheck.app.ui.nav.MemoriesRoute> { com.kharchacheck.app.feature.MemoriesScreen(vm, nav) }
+                composable<com.kharchacheck.app.ui.nav.TripRoute> { e -> com.kharchacheck.app.feature.TripDetailScreen(vm, nav, e.toRoute<com.kharchacheck.app.ui.nav.TripRoute>().id) }
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
                 composable<WealthRoute> { WealthScreen(vm, nav) }

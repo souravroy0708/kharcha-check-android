@@ -9,6 +9,8 @@ import com.kharchacheck.app.core.model.Attachment
 import com.kharchacheck.app.core.model.AttachmentKind
 import com.kharchacheck.app.core.model.Category
 import com.kharchacheck.app.core.model.Goal
+import com.kharchacheck.app.core.model.Money
+import com.kharchacheck.app.core.model.PayMode
 import com.kharchacheck.app.core.model.ReviewState
 import com.kharchacheck.app.core.model.Source
 import com.kharchacheck.app.core.model.Txn
@@ -139,8 +141,72 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun linkUnlinked(a: com.kharchacheck.app.domain.Account) = viewModelScope.launch {
         val n = c.tools.linkUnlinked(a.id); say(if (n > 0) "Linked $n entries to ${a.name} ✓" else "Nothing to link")
     }
-    fun saveTrip(t: com.kharchacheck.app.domain.Trip) = viewModelScope.launch { c.tools.saveTrip(t); say("Saved ✓") }
-    fun deleteTrip(t: com.kharchacheck.app.domain.Trip) = viewModelScope.launch { c.tools.deleteTrip(t.id); say("${t.name} removed. Its entries are kept.") }
+    fun saveTrip(t: com.kharchacheck.app.domain.Trip, onSaved: (Long) -> Unit = {}) = viewModelScope.launch { val id = c.tools.saveTrip(t); say("Saved ✓"); onSaved(id) }
+    fun deleteTrip(t: com.kharchacheck.app.domain.Trip) = viewModelScope.launch {
+        val photos = c.tools.deleteTrip(t.id)
+        photos.forEach { runCatching { c.files.removeById(it) } }
+        say("${t.name} removed. Its expense entries are kept.")
+    }
+
+    // ---- Trip details: bookings & costs, places, people, diary ----
+    val tripItems: StateFlow<List<com.kharchacheck.app.domain.TripItem>> = c.tools.tripItems.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val tripPlaces: StateFlow<List<com.kharchacheck.app.domain.TripPlace>> = c.tools.tripPlaces.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val tripPeople: StateFlow<List<com.kharchacheck.app.domain.TripPerson>> = c.tools.tripPeople.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val tripDiary: StateFlow<List<com.kharchacheck.app.domain.DiaryEntry>> = c.tools.tripDiary.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    /** Saves a booking / cost item. If it's already recorded as an expense, that entry follows the new amount and date. */
+    fun saveTripItem(i: com.kharchacheck.app.domain.TripItem) = viewModelScope.launch {
+        c.tools.saveTripItem(i)
+        val id = i.txnId
+        if (id != null) repo.txn(id)?.let { t ->
+            if (t.amountPaise != i.costPaise || (i.startAt != null && t.epochMillis != i.startAt)) {
+                repo.saveTxn(t.copy(amountPaise = i.costPaise, epochMillis = i.startAt ?: t.epochMillis, updatedAt = System.currentTimeMillis()))
+            }
+        }
+        say("Saved ✓")
+    }
+    fun deleteTripItem(i: com.kharchacheck.app.domain.TripItem) = viewModelScope.launch {
+        c.tools.deleteTripItem(i.id); say(if (i.txnId != null) "Removed. Its expense entry is kept." else "Removed")
+    }
+
+    /**
+     * Records a booking as an expense entry, tagged to the trip so it counts in the trip, budgets and reports.
+     * Uses the booking's date, a category that fits (train → Travel, cab → Cabs…) and the default account.
+     */
+    fun recordTripItem(trip: com.kharchacheck.app.domain.Trip, i: com.kharchacheck.app.domain.TripItem) = viewModelScope.launch {
+        val d = data.value ?: return@launch
+        if (i.costPaise <= 0) { say("Add the cost first"); return@launch }
+        val cat = d.categories.firstOrNull { it.key == i.kind.categoryKey && it.bucket.type == TxType.EXPENSE && !it.archived }
+            ?: d.categories.firstOrNull { it.key == "travel" && it.bucket.type == TxType.EXPENSE }
+            ?: d.categories.firstOrNull { it.bucket.type == TxType.EXPENSE } ?: return@launch
+        val route = if (i.from.isNotBlank() || i.to.isNotBlank()) " ${i.from} → ${i.to}".trimEnd() else ""
+        val note = listOf("${i.kind.label}$route", i.refNo.takeIf { it.isNotBlank() }?.let { "${i.kind.refLabel} $it" }, i.details.takeIf { it.isNotBlank() })
+            .filterNotNull().joinToString(" · ").take(200)
+        val now = System.currentTimeMillis()
+        val t = Txn(
+            amountPaise = i.costPaise, type = TxType.EXPENSE, categoryId = cat.id, epochMillis = i.startAt?.takeIf { it <= now } ?: now,
+            zoneId = java.time.ZoneId.systemDefault().id, mode = PayMode.UPI, payee = i.title.take(40), note = note,
+            tags = com.kharchacheck.app.domain.Trips.addTag("", trip.tag), source = Source.MANUAL, review = ReviewState.CONFIRMED,
+            accountId = accounts.value.firstOrNull { !it.archived }?.id,
+        )
+        val txnId = repo.saveTxn(t)
+        c.tools.saveTripItem(i.copy(paid = true, txnId = txnId))
+        say("Added to expenses ✓ (${Money.format(i.costPaise)}, ${cat.name})")
+    }
+
+    fun saveTripPlace(p: com.kharchacheck.app.domain.TripPlace) = viewModelScope.launch { c.tools.saveTripPlace(p) }
+    fun deleteTripPlace(p: com.kharchacheck.app.domain.TripPlace) = viewModelScope.launch { c.tools.deleteTripPlace(p.id) }
+    fun saveTripPerson(p: com.kharchacheck.app.domain.TripPerson) = viewModelScope.launch { c.tools.saveTripPerson(p) }
+    fun deleteTripPerson(p: com.kharchacheck.app.domain.TripPerson) = viewModelScope.launch { c.tools.deleteTripPerson(p.id) }
+    fun saveDiary(d: com.kharchacheck.app.domain.DiaryEntry) = viewModelScope.launch { c.tools.saveDiary(d); say("Saved to your diary ✓") }
+    fun deleteDiary(d: com.kharchacheck.app.domain.DiaryEntry) = viewModelScope.launch {
+        c.tools.deleteDiary(d.id); d.photoIds.forEach { runCatching { c.files.removeById(it) } }; say("Diary entry removed")
+    }
+    /** Photos are shrunk, encrypted and kept as trip photos (never cleaned up as unused receipts). */
+    fun addTripPhoto(uri: Uri, onAdded: (Attachment) -> Unit) = viewModelScope.launch {
+        runCatching { c.files.addTripPhoto(uri) }.onSuccess(onAdded).onFailure { say(fileError(it)) }
+    }
+    fun removeTripPhoto(id: Long) = viewModelScope.launch { runCatching { c.files.removeById(id) } }
     fun setBudgetRollover(categoryId: Long, on: Boolean) = viewModelScope.launch {
         repo.setBudgetRollover(categoryId, on)
         say(if (on) "Unspent money will carry into next month ✓" else "Carry-over off")

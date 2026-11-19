@@ -23,6 +23,10 @@ data class Trip(
     val currency: String = "INR",
     /** ₹ paise for 1 unit of [currency]: ₹84.20 per USD → 8420. Ignored for INR. */
     val ratePaise: Long = 100,
+    /** Where to, in the user's words ("Goa", "Shimla & Manali"). */
+    val destination: String = "",
+    /** Anything else: packing list, hotel address, emergency numbers. */
+    val notes: String = "",
 ) {
     val foreign: Boolean get() = currency != "INR" && ratePaise > 0
     val days: Int get() = (ChronoUnit.DAYS.between(start, end) + 1).toInt().coerceAtLeast(1)

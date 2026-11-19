@@ -10,8 +10,9 @@ import com.kharchacheck.app.data.security.DbKeyStore
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [CategoryEntity::class, TxnEntity::class, BudgetEntity::class, GoalEntity::class, PayeeRuleEntity::class, RecurringEntity::class, AttachmentEntity::class, DueEntity::class, BillEntity::class, HoldingEntity::class, NetItemEntity::class, NetSnapshotEntity::class, AccountEntity::class, TripEntity::class],
-    version = 3,
+    entities = [CategoryEntity::class, TxnEntity::class, BudgetEntity::class, GoalEntity::class, PayeeRuleEntity::class, RecurringEntity::class, AttachmentEntity::class, DueEntity::class, BillEntity::class, HoldingEntity::class, NetItemEntity::class, NetSnapshotEntity::class, AccountEntity::class, TripEntity::class,
+        TripItemEntity::class, TripPlaceEntity::class, TripPersonEntity::class, TripDiaryEntity::class],
+    version = 5,
     exportSchema = true,
 )
 abstract class KharchaDatabase : RoomDatabase() {
@@ -27,6 +28,7 @@ abstract class KharchaDatabase : RoomDatabase() {
     abstract fun wealth(): WealthDao
     abstract fun accounts(): AccountDao
     abstract fun trips(): TripDao
+    abstract fun tripPlan(): TripPlanDao
 
     companion object {
         const val NAME = "kharcha_v2.db"
@@ -38,7 +40,7 @@ abstract class KharchaDatabase : RoomDatabase() {
          *       db.execSQL("ALTER TABLE transactions ADD COLUMN foo INTEGER NOT NULL DEFAULT 0") } }
          * and commit the new app/schemas/…/2.json produced by the build. CI blocks schema changes without this.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         /** Size of the WAL file Android may keep after a checkpoint (it can never stay bigger than this). */
         private const val WAL_LIMIT_BYTES = 512 * 1024
@@ -124,5 +126,41 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
                 "`tag` TEXT NOT NULL, `budgetPaise` INTEGER NOT NULL, `startDay` INTEGER NOT NULL, `endDay` INTEGER NOT NULL, " +
                 "`currency` TEXT NOT NULL, `ratePaise` INTEGER NOT NULL)"
         )
+    }
+}
+
+/** v3 → v4: trip details (bookings & cost items, places, people, diary) and a destination / notes on each trip. Additive only. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `trips` ADD COLUMN `destination` TEXT NOT NULL DEFAULT ''")
+        db.execSQL("ALTER TABLE `trips` ADD COLUMN `notes` TEXT NOT NULL DEFAULT ''")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_items` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `kind` INTEGER NOT NULL, " +
+                "`title` TEXT NOT NULL, `fromPlace` TEXT NOT NULL, `toPlace` TEXT NOT NULL, `startAt` INTEGER NOT NULL, `endAt` INTEGER NOT NULL, " +
+                "`refNo` TEXT NOT NULL, `details` TEXT NOT NULL, `travellers` TEXT NOT NULL, `costPaise` INTEGER NOT NULL, `paid` INTEGER NOT NULL, " +
+                "`txnId` INTEGER, `note` TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_items_tripId` ON `trip_items` (`tripId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_places` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `name` TEXT NOT NULL, " +
+                "`day` INTEGER NOT NULL, `note` TEXT NOT NULL, `visited` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_places_tripId` ON `trip_places` (`tripId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_people` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `name` TEXT NOT NULL, `note` TEXT NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_people_tripId` ON `trip_people` (`tripId`)")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trip_diary` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `tripId` INTEGER NOT NULL, `day` INTEGER NOT NULL, " +
+                "`mood` TEXT NOT NULL, `title` TEXT NOT NULL, `body` TEXT NOT NULL, `place` TEXT NOT NULL, `photoIds` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_diary_tripId` ON `trip_diary` (`tripId`)")
+    }
+}
+
+/** v4 → v5: who paid each trip line item (settle up between travellers). Additive only. */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `trip_items` ADD COLUMN `paidBy` TEXT NOT NULL DEFAULT ''")
     }
 }

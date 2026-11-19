@@ -19,6 +19,12 @@ import com.kharchacheck.app.data.db.Codes
 import com.kharchacheck.app.data.db.ACCOUNT_KINDS
 import com.kharchacheck.app.data.db.AccountEntity
 import com.kharchacheck.app.data.db.TripEntity
+import com.kharchacheck.app.data.db.TRIP_ITEM_KINDS
+import com.kharchacheck.app.data.db.TripItemEntity
+import com.kharchacheck.app.data.db.TripPlaceEntity
+import com.kharchacheck.app.data.db.TripPersonEntity
+import com.kharchacheck.app.data.db.TripDiaryEntity
+import com.kharchacheck.app.domain.TripItemKind
 import com.kharchacheck.app.domain.AccountKind
 import com.kharchacheck.app.core.model.PayMode
 import com.kharchacheck.app.core.model.ReviewState
@@ -78,6 +84,21 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
             .put("trips", JSONArray(db.trips().all().map { t ->
                 JSONObject().put("id", t.id).put("name", t.name).put("emoji", t.emoji).put("tag", t.tag).put("budget", t.budgetPaise)
                     .put("start", t.startDay).put("end", t.endDay).put("cur", t.currency).put("rate", t.ratePaise)
+                    .put("dest", t.destination).put("notes", t.notes)
+            }))
+            .put("tripItems", JSONArray(db.tripPlan().allItems().map { i ->
+                JSONObject().put("id", i.id).put("trip", i.tripId).put("kind", Codes.of(TRIP_ITEM_KINDS, i.kind, TripItemKind.OTHER).name)
+                    .put("title", i.title).put("from", i.fromPlace).put("to", i.toPlace).put("startAt", i.startAt).put("endAt", i.endAt)
+                    .put("ref", i.refNo).put("details", i.details).put("who", i.travellers).put("cost", i.costPaise).put("paid", i.paid)
+                    .put("txn", i.txnId ?: JSONObject.NULL).put("note", i.note).put("paidBy", i.paidBy)
+            }))
+            .put("tripPlaces", JSONArray(db.tripPlan().allPlaces().map { p ->
+                JSONObject().put("id", p.id).put("trip", p.tripId).put("name", p.name).put("day", p.day).put("note", p.note).put("visited", p.visited).put("order", p.sortOrder)
+            }))
+            .put("tripPeople", JSONArray(db.tripPlan().allPeople().map { p -> JSONObject().put("id", p.id).put("trip", p.tripId).put("name", p.name).put("note", p.note) }))
+            .put("tripDiary", JSONArray(db.tripPlan().allDiary().map { d ->
+                JSONObject().put("id", d.id).put("trip", d.tripId).put("day", d.day).put("mood", d.mood).put("title", d.title).put("body", d.body)
+                    .put("place", d.place).put("photos", d.photoIds).put("created", d.createdAt)
             }))
             .put("goals", JSONArray(db.goals().all().map { g ->
                 JSONObject().put("id", g.id).put("name", g.name).put("emoji", g.emoji).put("target", g.targetPaise).put("saved", g.savedPaise)
@@ -198,7 +219,17 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
         val accounts = arr("accounts").mapObj { AccountEntity(it.getLong("id"), it.getString("name"), it.optString("emoji", "🏦"),
             Codes.codeOfName(ACCOUNT_KINDS, it.optString("kind", "BANK"), AccountKind.BANK), it.optLong("opening"), it.optBoolean("archived"), it.optInt("order")) }
         val trips = arr("trips").mapObj { TripEntity(it.getLong("id"), it.getString("name"), it.optString("emoji", "✈️"), it.getString("tag"),
-            it.optLong("budget"), it.getLong("start"), it.getLong("end"), it.optString("cur", "INR"), it.optLong("rate", 100)) }
+            it.optLong("budget"), it.getLong("start"), it.getLong("end"), it.optString("cur", "INR"), it.optLong("rate", 100),
+            it.optString("dest"), it.optString("notes")) }
+        val tripItems = arr("tripItems").mapObj { TripItemEntity(it.getLong("id"), it.getLong("trip"),
+            Codes.codeOfName(TRIP_ITEM_KINDS, it.optString("kind", "OTHER"), TripItemKind.OTHER), it.optString("title"), it.optString("from"), it.optString("to"),
+            it.optLong("startAt"), it.optLong("endAt"), it.optString("ref"), it.optString("details"), it.optString("who"), it.optLong("cost"),
+            it.optBoolean("paid"), if (it.isNull("txn")) null else it.optLong("txn").takeIf { v -> v > 0 }, it.optString("note"), it.optString("paidBy")) }
+        val tripPlaces = arr("tripPlaces").mapObj { TripPlaceEntity(it.getLong("id"), it.getLong("trip"), it.optString("name"), it.optLong("day", -1),
+            it.optString("note"), it.optBoolean("visited"), it.optInt("order")) }
+        val tripPeople = arr("tripPeople").mapObj { TripPersonEntity(it.getLong("id"), it.getLong("trip"), it.optString("name"), it.optString("note")) }
+        val tripDiary = arr("tripDiary").mapObj { TripDiaryEntity(it.getLong("id"), it.getLong("trip"), it.getLong("day"), it.optString("mood", "😊"),
+            it.optString("title"), it.optString("body"), it.optString("place"), it.optString("photos"), it.optLong("created")) }
         val goals = arr("goals").mapObj { GoalEntity(it.getLong("id"), it.getString("name"), it.getString("emoji"), it.getLong("target"),
             it.getLong("saved"), if (it.isNull("day")) null else it.getLong("day"), it.optBoolean("archived")) }
         val recurring = arr("recurring").mapObj { RecurringEntity(it.getLong("id"), it.getLong("amt"), it.getString("type"), it.getLong("cat"),
@@ -226,6 +257,10 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
             db.wealth().insertHoldings(holdings); db.wealth().insertItems(netItems); db.wealth().insertSnapshots(snaps)
             db.accounts().clear(); db.accounts().insertAll(accounts)
             db.trips().clear(); db.trips().insertAll(trips)
+            db.tripPlan().clearItems(); db.tripPlan().insertItems(tripItems)
+            db.tripPlan().clearPlaces(); db.tripPlan().insertPlaces(tripPlaces)
+            db.tripPlan().clearPeople(); db.tripPlan().insertPeople(tripPeople)
+            db.tripPlan().clearDiary(); db.tripPlan().insertDiary(tripDiary)
         }
         j.optJSONObject("settings")?.let { s ->
             val cur = settings.current()
