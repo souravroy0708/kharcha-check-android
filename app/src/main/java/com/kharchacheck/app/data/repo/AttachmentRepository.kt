@@ -49,4 +49,27 @@ class AttachmentRepository(private val db: KharchaDatabase, private val vault: F
     fun removeProfilePhoto() = vault.delete(FileVault.PROFILE)
 
     suspend fun wipe() { db.attachments().clear(); vault.wipe() }
+
+    fun vaultBytes(): Long = vault.totalBytes()
+
+    /** Older screenshots saved as PNG/JPEG are re-saved as WebP. Returns bytes saved. Entries are untouched. */
+    suspend fun shrinkOldImages(): Long {
+        var saved = 0L
+        for (e in db.attachments().all()) {
+            if (!e.mime.startsWith("image/") || e.mime == "image/webp") continue
+            val bytes = runCatching { vault.read(e.fileName) }.getOrNull() ?: continue
+            val small = FileVault.shrink(bytes, 2200) ?: continue
+            vault.replace(e.fileName, small)
+            db.attachments().setFile(e.id, "image/webp", small.size.toLong())
+            saved += bytes.size - small.size
+        }
+        return saved
+    }
+
+    /** Removes statement files (PDF / Excel) added before [before]. The entries read from them stay. Returns how many. */
+    suspend fun removeStatementFilesBefore(before: Long): Int {
+        val old = db.attachments().all().filter { it.kind != "RECEIPT" && it.kind != "OTHER" && it.createdAt < before }
+        old.forEach { db.attachments().delete(it.id); vault.delete(it.fileName) }
+        return old.size
+    }
 }

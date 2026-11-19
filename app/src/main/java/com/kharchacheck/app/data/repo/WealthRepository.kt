@@ -21,6 +21,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
@@ -34,7 +36,13 @@ import java.time.YearMonth
  * search and values working offline.
  */
 class WealthRepository(private val context: Context, private val db: KharchaDatabase) {
-    private val cache = File(context.noBackupFilesDir, "amfi_nav.tsv")
+    /** Gzipped: the list of every fund takes ~0.5 MB instead of ~3 MB. Only schemes with a price are kept. */
+    private val cache = File(context.noBackupFilesDir, "amfi_nav.tsv.gz")
+    private val legacyCache = File(context.noBackupFilesDir, "amfi_nav.tsv")
+    val cacheBytes: Long get() = cache.length() + legacyCache.length()
+
+    /** Deletes the offline fund-price list; it downloads again the next time it's needed. Holdings stay. */
+    suspend fun clearCache() = lock.withLock { cache.delete(); legacyCache.delete(); _schemes.value = emptyList() }
     private val lock = Mutex()
     private val _schemes = MutableStateFlow<List<Scheme>>(emptyList())
     val schemes: StateFlow<List<Scheme>> = _schemes.asStateFlow()
@@ -51,9 +59,19 @@ class WealthRepository(private val context: Context, private val db: KharchaData
 
     /** Loads cached NAVs into memory (fast) without touching the network. */
     suspend fun loadCache() = lock.withLock {
-        if (_schemes.value.isNotEmpty() || !cache.exists()) return@withLock
+        if (_schemes.value.isNotEmpty()) return@withLock
+        withContext(Dispatchers.IO) {
+            // One-time: shrink the old uncompressed cache, keeping its date.
+            if (legacyCache.exists() && !cache.exists()) runCatching {
+                val at = legacyCache.lastModified()
+                GZIPOutputStream(cache.outputStream()).bufferedWriter().use { w -> legacyCache.bufferedReader().useLines { ls -> ls.forEach { w.write(it); w.write("\n") } } }
+                cache.setLastModified(at)
+            }
+            legacyCache.delete()
+        }
+        if (!cache.exists()) return@withLock
         _schemes.value = withContext(Dispatchers.IO) {
-            cache.readLines().mapNotNull { l ->
+            runCatching { GZIPInputStream(cache.inputStream()).bufferedReader().readLines() }.getOrDefault(emptyList()).mapNotNull { l ->
                 val p = l.split('\t'); if (p.size < 6) return@mapNotNull null
                 Scheme(p[0], p[1], p[2], p[3], p[4].toLongOrNull(), p[5].takeIf { it.isNotEmpty() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() })
             }
@@ -68,10 +86,10 @@ class WealthRepository(private val context: Context, private val db: KharchaData
         if (parsed.size < 1000) error("AMFI returned an unexpected file. Try again later.")
         withContext(Dispatchers.IO) {
             val tmp = File(cache.parentFile, "amfi_nav.tmp")
-            tmp.bufferedWriter().use { w -> parsed.forEach { s ->
+            GZIPOutputStream(tmp.outputStream()).bufferedWriter().use { w -> parsed.filter { it.navMicro != null }.forEach { s ->
                 w.write(listOf(s.code, s.name.replace('\t', ' '), s.amc, s.category, s.navMicro?.toString().orEmpty(), s.date?.toString().orEmpty()).joinToString("\t")); w.write("\n")
             } }
-            cache.delete(); tmp.renameTo(cache)
+            cache.delete(); legacyCache.delete(); tmp.renameTo(cache)
         }
         _schemes.value = parsed
         true

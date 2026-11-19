@@ -15,6 +15,12 @@ import com.kharchacheck.app.data.db.NetSnapshotEntity
 import com.kharchacheck.app.data.db.PayeeRuleEntity
 import com.kharchacheck.app.data.db.RecurringEntity
 import com.kharchacheck.app.data.db.TxnEntity
+import com.kharchacheck.app.data.db.Codes
+import com.kharchacheck.app.core.model.PayMode
+import com.kharchacheck.app.core.model.ReviewState
+import com.kharchacheck.app.core.model.Source
+import com.kharchacheck.app.core.model.TxType
+import com.kharchacheck.app.core.model.Worth
 import com.kharchacheck.app.data.repo.SettingsRepository
 import com.kharchacheck.app.data.db.AttachmentEntity
 import com.kharchacheck.app.data.files.FileVault
@@ -51,9 +57,12 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                     .put("bucket", c.bucket).put("order", c.sortOrder).put("archived", c.archived).put("custom", c.custom)
             }))
             .put("txns", JSONArray(txns.map { t ->
-                JSONObject().put("id", t.id).put("amt", t.amountPaise).put("type", t.type).put("cat", t.categoryId).put("at", t.epochMillis)
-                    .put("zone", t.zoneId).put("mode", t.mode).put("payee", t.payee).put("note", t.note).put("tags", t.tags)
-                    .put("worth", t.worth).put("source", t.source).put("review", t.review).put("ref", t.refNo)
+                // Readable names, not the compact codes, so any app version can restore this file.
+                JSONObject().put("id", t.id).put("amt", t.amountPaise).put("type", Codes.of(Codes.TYPE, t.type, TxType.EXPENSE).name)
+                    .put("cat", t.categoryId).put("at", t.epochMillis).put("zone", Codes.unpackZone(t.zoneId))
+                    .put("mode", Codes.of(Codes.MODE, t.mode, PayMode.OTHER).name).put("payee", t.payee).put("note", t.note).put("tags", t.tags)
+                    .put("worth", Codes.of(Codes.WORTH, t.worth, Worth.NONE).name).put("source", Codes.of(Codes.SOURCE, t.source, Source.MANUAL).name)
+                    .put("review", Codes.of(Codes.REVIEW, t.review, ReviewState.CONFIRMED).name).put("ref", t.refNo)
                     .put("goal", t.goalId ?: JSONObject.NULL).put("created", t.createdAt).put("updated", t.updatedAt)
             }))
             .put("budgets", JSONArray(db.budgets().all().map { JSONObject().put("cat", it.categoryId).put("limit", it.limitPaise) }))
@@ -163,9 +172,11 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
 
         val cats = arr("categories").mapObj { CategoryEntity(it.getLong("id"), it.getString("key"), it.getString("name"), it.getString("emoji"),
             it.getLong("color"), it.getString("bucket"), it.getInt("order"), it.optBoolean("archived"), it.optBoolean("custom")) }
-        val txns = arr("txns").mapObj { TxnEntity(it.getLong("id"), it.getLong("amt"), it.getString("type"), it.getLong("cat"), it.getLong("at"),
-            it.getString("zone"), it.getString("mode"), it.optString("payee"), it.optString("note"), it.optString("tags"), it.optString("worth", "NONE"),
-            it.optString("source", "MANUAL"), it.optString("review", "CONFIRMED"), it.optString("ref"),
+        val txns = arr("txns").mapObj { TxnEntity(it.getLong("id"), it.getLong("amt"), Codes.codeOfName(Codes.TYPE, it.getString("type"), TxType.EXPENSE),
+            it.getLong("cat"), it.getLong("at"), Codes.packZone(it.getString("zone")), Codes.codeOfName(Codes.MODE, it.getString("mode"), PayMode.OTHER),
+            it.optString("payee"), it.optString("note"), it.optString("tags"), Codes.codeOfName(Codes.WORTH, it.optString("worth", "NONE"), Worth.NONE),
+            Codes.codeOfName(Codes.SOURCE, it.optString("source", "MANUAL"), Source.MANUAL),
+            Codes.codeOfName(Codes.REVIEW, it.optString("review", "CONFIRMED"), ReviewState.CONFIRMED), it.optString("ref"),
             if (it.isNull("goal")) null else it.getLong("goal"), it.optLong("created"), it.optLong("updated")) }
         val budgets = arr("budgets").mapObj { BudgetEntity(it.getLong("cat"), it.getLong("limit")) }
         val goals = arr("goals").mapObj { GoalEntity(it.getLong("id"), it.getString("name"), it.getString("emoji"), it.getLong("target"),

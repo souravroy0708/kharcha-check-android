@@ -3,6 +3,7 @@ package com.kharchacheck.app.data.files
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.security.keystore.KeyGenParameterSpec
@@ -61,7 +62,7 @@ class FileVault(private val context: Context) {
         var bytes = raw
         var outMime = mime
         if (mime.startsWith("image/")) {
-            shrink(raw, imageMaxPx)?.let { bytes = it; outMime = "image/jpeg" }
+            shrink(raw, imageMaxPx)?.let { bytes = it; outMime = "image/webp" }
         }
         val name = fileName ?: (UUID.randomUUID().toString() + ".bin")
         write(name, bytes)
@@ -77,6 +78,10 @@ class FileVault(private val context: Context) {
 
     fun exists(fileName: String) = File(dir, fileName).exists()
     fun delete(fileName: String) { File(dir, fileName).delete() }
+    /** Re-saves a file (encrypted) with new contents, e.g. a screenshot shrunk to WebP. */
+    suspend fun replace(fileName: String, plain: ByteArray) = withContext(Dispatchers.IO) { write(fileName, plain) }
+    /** Bytes on disk for everything in the vault (attachments + profile photo). */
+    fun totalBytes(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0L
     fun wipe() { dir.listFiles()?.forEach { it.delete() } }
 
     // ---- Restore staging: files from a backup land here first and only replace the real vault once the
@@ -136,17 +141,23 @@ class FileVault(private val context: Context) {
         val SHEETS = setOf("text/csv", "text/comma-separated-values", "text/plain", "text/tab-separated-values", "application/csv",
             "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-        /** Re-encodes big photos as JPEG within [maxPx]. Returns null when no shrinking is needed or possible. */
+        /**
+         * Re-encodes a photo or screenshot as WebP (quality 80) within [maxPx]. A phone screenshot saved as PNG
+         * is often 0.5 to 1.5 MB; as WebP it is usually 80 to 250 KB and still sharp enough to read and OCR.
+         * Returns null when the image can't be decoded or the result wouldn't be at least 10% smaller.
+         */
         fun shrink(bytes: ByteArray, maxPx: Int): ByteArray? {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             val w = bounds.outWidth; val h = bounds.outHeight
             if (w <= 0 || h <= 0) return null
-            if (maxOf(w, h) <= maxPx && bytes.size < 1_500_000) return null
             val bmp = decodeSampled(bytes, maxPx) ?: return null
             val scale = maxPx.toFloat() / maxOf(bmp.width, bmp.height)
             val scaled = if (scale < 1f) Bitmap.createScaledBitmap(bmp, (bmp.width * scale).toInt(), (bmp.height * scale).toInt(), true) else bmp
-            return ByteArrayOutputStream().use { out -> scaled.compress(Bitmap.CompressFormat.JPEG, 85, out); out.toByteArray() }
+            @Suppress("DEPRECATION")
+            val format = if (Build.VERSION.SDK_INT >= 30) Bitmap.CompressFormat.WEBP_LOSSY else Bitmap.CompressFormat.WEBP
+            val out = ByteArrayOutputStream().use { o -> scaled.compress(format, 80, o); o.toByteArray() }
+            return out.takeIf { it.isNotEmpty() && it.size < bytes.size * 0.9 }
         }
 
         /** Memory-safe decode for thumbnails and viewers. */

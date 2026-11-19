@@ -30,6 +30,11 @@ data class CategoryEntity(
     val custom: Boolean = false,
 )
 
+/**
+ * One money entry. Kept deliberately small, because this is the table that grows every day:
+ * money is whole paise (an integer, never a float), the five small enums are 1-byte integer [Codes],
+ * and the time zone is stored as "" for India (the usual case) instead of "Asia/Kolkata" on every row.
+ */
 @Entity(
     tableName = "transactions",
     indices = [Index("epochMillis"), Index("categoryId"), Index("review"), Index("refNo")],
@@ -37,17 +42,17 @@ data class CategoryEntity(
 data class TxnEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val amountPaise: Long,
-    val type: String,
+    val type: Int,
     val categoryId: Long,
     val epochMillis: Long,
     val zoneId: String,
-    val mode: String,
+    val mode: Int,
     val payee: String,
     val note: String,
     val tags: String,
-    val worth: String,
-    val source: String,
-    val review: String,
+    val worth: Int,
+    val source: Int,
+    val review: Int,
     val refNo: String,
     val goalId: Long?,
     val createdAt: Long,
@@ -148,21 +153,47 @@ data class NetSnapshotEntity(@PrimaryKey val month: String, val netPaise: Long)
 @Entity(tableName = "payee_rules", indices = [Index(value = ["pattern"], unique = true)])
 data class PayeeRuleEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val pattern: String, val categoryId: Long)
 
+/**
+ * Integer codes for the small enums in [TxnEntity] (1 byte each on disk instead of a 6–12 byte name).
+ * NEVER reorder or remove an entry: stored rows depend on these positions. New values go at the END.
+ * Backups still write readable names (see BackupManager), so every app version can restore any backup.
+ */
+object Codes {
+    val TYPE = listOf(TxType.EXPENSE, TxType.INCOME, TxType.INVEST, TxType.TRANSFER)
+    val MODE = listOf(PayMode.UPI, PayMode.CARD, PayMode.CASH, PayMode.NET_BANKING, PayMode.WALLET, PayMode.OTHER)
+    val WORTH = listOf(Worth.NONE, Worth.NEEDED, Worth.WORTH_IT, Worth.REGRET)
+    val SOURCE = listOf(Source.MANUAL, Source.SMS, Source.SHARED, Source.RECURRING, Source.STATEMENT)
+    val REVIEW = listOf(ReviewState.CONFIRMED, ReviewState.NEEDS_REVIEW)
+
+    fun <E> code(list: List<E>, e: E): Int = list.indexOf(e).coerceAtLeast(0)
+    fun <E> of(list: List<E>, code: Int, fallback: E): E = list.getOrElse(code) { fallback }
+    fun <E : Enum<E>> codeOfName(list: List<E>, name: String, fallback: E): Int = code(list, list.firstOrNull { it.name == name } ?: fallback)
+
+    fun type(t: TxType) = code(TYPE, t)
+
+    /** Most entries are made in India: store "" instead of repeating the zone name on every row. */
+    const val HOME_ZONE = "Asia/Kolkata"
+    fun packZone(zone: String) = if (zone == HOME_ZONE) "" else zone
+    fun unpackZone(stored: String) = stored.ifEmpty { HOME_ZONE }
+}
+
 private inline fun <reified E : Enum<E>> enumOr(name: String, fallback: E): E = runCatching { enumValueOf<E>(name) }.getOrDefault(fallback)
 
 fun CategoryEntity.toModel() = Category(id, key, name, emoji, colorArgb, enumOr(bucket, Bucket.WANT), sortOrder, archived, custom)
 fun Category.toEntity() = CategoryEntity(id, key, name, emoji, colorArgb, bucket.name, sortOrder, archived, custom)
 
 fun TxnEntity.toModel() = Txn(
-    id = id, amountPaise = amountPaise, type = enumOr(type, TxType.EXPENSE), categoryId = categoryId, epochMillis = epochMillis,
-    zoneId = zoneId, mode = enumOr(mode, PayMode.OTHER), payee = payee, note = note, tags = tags, worth = enumOr(worth, Worth.NONE),
-    source = enumOr(source, Source.MANUAL), review = enumOr(review, ReviewState.CONFIRMED), refNo = refNo, goalId = goalId,
+    id = id, amountPaise = amountPaise, type = Codes.of(Codes.TYPE, type, TxType.EXPENSE), categoryId = categoryId, epochMillis = epochMillis,
+    zoneId = Codes.unpackZone(zoneId), mode = Codes.of(Codes.MODE, mode, PayMode.OTHER), payee = payee, note = note, tags = tags,
+    worth = Codes.of(Codes.WORTH, worth, Worth.NONE), source = Codes.of(Codes.SOURCE, source, Source.MANUAL),
+    review = Codes.of(Codes.REVIEW, review, ReviewState.CONFIRMED), refNo = refNo, goalId = goalId,
     createdAt = createdAt, updatedAt = updatedAt,
 )
 
 fun Txn.toEntity() = TxnEntity(
-    id, amountPaise, type.name, categoryId, epochMillis, zoneId, mode.name, payee.trim(), note.trim(), tags.trim(),
-    worth.name, source.name, review.name, refNo, goalId, createdAt, updatedAt,
+    id, amountPaise, Codes.code(Codes.TYPE, type), categoryId, epochMillis, Codes.packZone(zoneId), Codes.code(Codes.MODE, mode),
+    payee.trim(), note.trim(), tags.trim(), Codes.code(Codes.WORTH, worth), Codes.code(Codes.SOURCE, source),
+    Codes.code(Codes.REVIEW, review), refNo.trim(), goalId, createdAt, updatedAt,
 )
 
 fun GoalEntity.toModel() = Goal(id, name, emoji, targetPaise, savedPaise, targetEpochDay?.let(LocalDate::ofEpochDay), archived)

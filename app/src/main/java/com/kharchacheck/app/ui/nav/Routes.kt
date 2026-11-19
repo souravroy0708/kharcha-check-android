@@ -11,6 +11,7 @@ import kotlinx.serialization.Serializable
 @Serializable object BudgetsRoute
 @Serializable object InboxRoute
 @Serializable object PrivacyRoute
+@Serializable object StorageRoute
 @Serializable object RecurringRoute
 @Serializable data class StatementsRoute(val month: String = "")
 @Serializable data class ImportRoute(val attachmentId: Long)

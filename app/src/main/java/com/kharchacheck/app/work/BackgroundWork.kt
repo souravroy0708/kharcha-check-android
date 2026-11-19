@@ -45,6 +45,28 @@ class NavRefreshWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker
 }
 
 /**
+ * Daily, fully offline: records this month's net worth (from the last known prices) and keeps storage compact
+ * (folds the database log, rebuilds it only when 10%+ is free space, clears share copies). No network needed.
+ */
+class UpkeepWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
+    override suspend fun doWork(): Result {
+        val c = applicationContext.container
+        runCatching { c.wealth.snapshotNow(); c.wealth.trimMemory() }
+        c.storage.dailyUpkeep()
+        return Result.success()
+    }
+
+    companion object {
+        fun schedule(ctx: Context) {
+            val req = PeriodicWorkRequestBuilder<UpkeepWorker>(24, TimeUnit.HOURS)
+                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
+                .build()
+            WorkManager.getInstance(ctx).enqueueUniquePeriodicWork("upkeep", ExistingPeriodicWorkPolicy.KEEP, req)
+        }
+    }
+}
+
+/**
  * Daily encrypted backup into the folder the user picked (local, SD card, or a cloud provider such as
  * Google Drive through the system picker). Keeps the newest 7 automatic backups.
  */

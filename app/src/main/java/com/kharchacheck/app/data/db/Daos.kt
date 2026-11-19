@@ -27,13 +27,13 @@ interface TxnDao {
     @Insert suspend fun insertAll(list: List<TxnEntity>)
     @Query("DELETE FROM transactions WHERE id = :id") suspend fun delete(id: Long)
     @Query("DELETE FROM transactions WHERE id IN (:ids)") suspend fun deleteIds(ids: List<Long>)
-    @Query("UPDATE transactions SET review = 'CONFIRMED' WHERE id IN (:ids)") suspend fun confirm(ids: List<Long>)
+    @Query("UPDATE transactions SET review = 0 WHERE id IN (:ids)") /* 0 = Codes.REVIEW CONFIRMED */ suspend fun confirm(ids: List<Long>)
     @Query("UPDATE transactions SET categoryId = :to WHERE categoryId = :from") suspend fun moveCategory(from: Long, to: Long)
     @Query("SELECT COUNT(*) FROM transactions WHERE refNo = :ref AND refNo != ''") suspend fun countRef(ref: String): Int
     @Query("SELECT COUNT(*) FROM transactions WHERE amountPaise = :amount AND type = :type AND epochMillis BETWEEN :from AND :to")
-    suspend fun countSimilar(amount: Long, type: String, from: Long, to: Long): Int
+    suspend fun countSimilar(amount: Long, type: Int, from: Long, to: Long): Int
     @Query("SELECT categoryId FROM transactions WHERE type = :type GROUP BY categoryId ORDER BY COUNT(*) DESC, MAX(epochMillis) DESC LIMIT :limit")
-    suspend fun topCategories(type: String, limit: Int): List<Long>
+    suspend fun topCategories(type: Int, limit: Int): List<Long>
     @Query("DELETE FROM transactions") suspend fun clear()
 }
 
@@ -87,6 +87,7 @@ interface AttachmentDao {
     @Query("UPDATE attachments SET txnId = :txnId WHERE id IN (:ids)") suspend fun link(ids: List<Long>, txnId: Long)
     @Query("DELETE FROM attachments WHERE id = :id") suspend fun delete(id: Long)
     @Query("UPDATE attachments SET kind = :kind, month = :month WHERE id = :id") suspend fun setKind(id: Long, kind: String, month: String?)
+    @Query("UPDATE attachments SET mime = :mime, sizeBytes = :size WHERE id = :id") suspend fun setFile(id: Long, mime: String, size: Long)
     /** Receipts picked for an entry that was never saved, or whose entry was deleted, after a grace period. */
     @Query("SELECT * FROM attachments WHERE kind = 'RECEIPT' AND createdAt < :before AND (txnId IS NULL OR txnId NOT IN (SELECT id FROM transactions))")
     suspend fun orphans(before: Long): List<AttachmentEntity>

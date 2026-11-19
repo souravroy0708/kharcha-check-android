@@ -85,6 +85,8 @@ import com.kharchacheck.app.ui.nav.GrowRoute
 import com.kharchacheck.app.ui.nav.HomeRoute
 import com.kharchacheck.app.ui.nav.InboxRoute
 import com.kharchacheck.app.ui.nav.PrivacyRoute
+import com.kharchacheck.app.ui.nav.StorageRoute
+import com.kharchacheck.app.feature.StorageScreen
 import com.kharchacheck.app.ui.nav.RecurringRoute
 import com.kharchacheck.app.ui.nav.StatementsRoute
 import com.kharchacheck.app.ui.nav.ImportRoute
@@ -231,6 +233,7 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<BudgetsRoute> { BudgetsScreen(vm, nav) }
                 composable<InboxRoute> { InboxScreen(vm, nav) }
                 composable<PrivacyRoute> { PrivacyScreen(nav) }
+                composable<StorageRoute> { StorageScreen(vm, nav) }
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
                 composable<WealthRoute> { WealthScreen(vm, nav) }

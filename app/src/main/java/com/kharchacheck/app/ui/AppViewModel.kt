@@ -401,6 +401,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         w.loadCache()
         val needsNav = force || holdings.value.any { it.kind == HoldingKind.MUTUAL_FUND } || w.schemes.value.isEmpty()
         if (!needsNav) return@launch
+        // Offline: keep working from the last saved prices, and say so only when it matters.
+        if (!isOnline()) {
+            if (force || w.schemes.value.isEmpty()) say("You're offline. Fund prices update when you're back online; everything else works offline.")
+            w.snapshotNow()
+            return@launch
+        }
         _navBusy.value = true
         runCatching { w.refresh(maxAgeHours = 12, force = force) }
             .onSuccess { fresh -> if (fresh && force) say("Latest NAVs downloaded ✓") }
@@ -409,6 +415,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         w.snapshotNow()
     }
     fun closeWealth() = w.trimMemory()
+
+    /** True when the phone has a working internet connection. Only fund prices (and optional voice) ever need it. */
+    fun isOnline(): Boolean = runCatching {
+        val cm = getApplication<Application>().getSystemService(android.net.ConnectivityManager::class.java)
+        cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }.getOrDefault(false)
     fun saveHolding(h: Holding) = viewModelScope.launch { w.saveHolding(h); w.snapshotNow() }
     fun deleteHolding(h: Holding) = viewModelScope.launch { w.deleteHolding(h.id); w.snapshotNow() }
     fun saveNetItem(i: NetItem) = viewModelScope.launch { w.saveItem(i); w.snapshotNow() }

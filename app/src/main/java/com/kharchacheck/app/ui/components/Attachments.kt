@@ -142,7 +142,7 @@ fun AttachmentViewer(vm: AppViewModel, a: Attachment, onDismiss: () -> Unit, onD
         awaitDispose { (loaded as? Loaded.Pdf)?.doc?.close() }
     }
     fun withBytes(block: (ByteArray) -> Unit) = scope.launch { vm.attachmentBytes(a)?.let(block) }
-    val name = a.originalName.ifBlank { a.label.ifBlank { a.kind.label } }.let { n -> if (a.isPdf && !n.endsWith(".pdf", true)) "$n.pdf" else if (a.isImage && !n.contains('.')) "$n.jpg" else if (a.isSheet && !n.contains('.')) "$n.csv" else n }
+    val name = a.originalName.ifBlank { a.label.ifBlank { a.kind.label } }.let { n -> if (a.isPdf && !n.endsWith(".pdf", true)) "$n.pdf" else if (a.isImage && !n.contains('.')) (if (a.mime == "image/webp") "$n.webp" else "$n.jpg") else if (a.isSheet && !n.contains('.')) "$n.csv" else n }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Column(Modifier.fillMaxSize().background(Color.Black)) {

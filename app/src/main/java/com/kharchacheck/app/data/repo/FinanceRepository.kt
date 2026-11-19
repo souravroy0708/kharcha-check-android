@@ -78,7 +78,7 @@ class FinanceRepository(private val db: KharchaDatabase) {
 
     suspend fun confirm(ids: List<Long>) = db.txns().confirm(ids)
 
-    suspend fun topCategoryIds(type: TxType, limit: Int = 8): List<Long> = db.txns().topCategories(type.name, limit)
+    suspend fun topCategoryIds(type: TxType, limit: Int = 8): List<Long> = db.txns().topCategories(com.kharchacheck.app.data.db.Codes.type(type), limit)
 
     // ---- Categories ----
     suspend fun saveCategory(c: Category): Long {
@@ -126,7 +126,7 @@ class FinanceRepository(private val db: KharchaDatabase) {
     /** True if this looks like an entry we already have (same bank ref, or same amount within 2 minutes). */
     suspend fun isDuplicate(t: Txn): Boolean {
         if (t.refNo.isNotBlank() && db.txns().countRef(t.refNo) > 0) return true
-        return db.txns().countSimilar(t.amountPaise, t.type.name, t.epochMillis - 120_000, t.epochMillis + 120_000) > 0
+        return db.txns().countSimilar(t.amountPaise, com.kharchacheck.app.data.db.Codes.type(t.type), t.epochMillis - 120_000, t.epochMillis + 120_000) > 0
     }
 
 

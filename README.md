@@ -70,6 +70,10 @@ How (all features kept): no x86 emulator libraries in release builds; native lib
 downloadable APKs only (`-PcompressNativeLibs`); compressed OCR model; Bouncy Castle's unused post-quantum
 tables and PdfBox's Chinese/Japanese/Korean font maps excluded. Test builds (`smart-TEST`) keep x86 for emulators.
 
+## Offline and storage
+
+Everything works without internet and is stored only on the phone (SQLCipher database + encrypted file vault). Internet is used for just three optional things: AMFI fund prices (last prices kept offline, gzipped), voice entry on phones without offline speech, and backups if the user picks a cloud folder. Entries take ~107 bytes each (integer paise, 1-byte enum codes, empty defaults), screenshots are saved as WebP, and a daily offline `UpkeepWorker` keeps the database compact. **Settings → Storage & offline** shows every byte and has one-tap clean-up. Details: `docs/DATABASE.md`.
+
 ## Website
 
 `docs/index.html` is the public website (static HTML, no build step). In the repo settings, set

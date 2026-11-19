@@ -68,6 +68,7 @@ import com.kharchacheck.app.ui.nav.WrappedRoute
 import com.kharchacheck.app.ui.nav.CategoriesRoute
 import com.kharchacheck.app.ui.nav.InboxRoute
 import com.kharchacheck.app.ui.nav.PrivacyRoute
+import com.kharchacheck.app.ui.nav.StorageRoute
 import com.kharchacheck.app.ui.nav.RecurringRoute
 import com.kharchacheck.app.ui.nav.StatementsRoute
 import com.kharchacheck.app.ui.theme.Coral
@@ -117,6 +118,18 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                     Column(Modifier.weight(1f)) {
                         Text("Private by design", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
                         Text("Encrypted on this phone · no account · no ads · no tracking", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                }
+            }
+        }
+        item {
+            KcCard(onClick = { nav.navigate(StorageRoute) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("💾", fontSize = 30.sp); Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Storage & offline", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("Works without internet · see what's stored · make it smaller", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     }
                     Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
                 }
@@ -302,7 +315,7 @@ fun PrivacyScreen(nav: NavHostController) {
     val p = LocalPlatform.current
     SubScreen("Privacy", onBack = { nav.popBackStack() }) {
         val points = listOf(
-            "🌐" to ("Internet only where it helps" to "Used only to download AMFI's public mutual fund prices (the whole list, so nobody learns what you hold) and to save backups to a folder you choose. Your entries are never sent to any server."),
+            "🌐" to ("Works offline" to "Everything works without internet. It's used only to download AMFI's public mutual fund prices (the whole list, so nobody learns what you hold), for voice entry on phones without offline speech, and for backups if you pick a cloud folder. Your entries are never sent to any server."),
             "🔐" to ("Encrypted on your phone" to "Your entries live in an AES-256 encrypted database. The key is held by your phone's secure hardware (Android Keystore)."),
             "🙅" to ("No account, no tracking" to "No sign-up, no analytics, no ads, no third-party SDKs that phone home. If the app crashes, you choose whether to email the report."),
             "🎤" to ("Microphone only when you tap 🎤" to "Asked the first time you use voice entry, and on only while the listening sheet is open. On Android 12+ speech is turned into text on the phone where supported; otherwise your phone's speech service (usually Google) does it. Recordings are never saved or uploaded by Kharcha Check, only the words are used. Turn it off any time in App info → Permissions."),

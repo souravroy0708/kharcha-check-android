@@ -31,6 +31,7 @@ class AppContainer(context: Context) {
     val tools: ToolsRepository by lazy { ToolsRepository(database) }
     val wealth: WealthRepository by lazy { WealthRepository(context, database) }
     val reader: AutoReader by lazy { AutoReader(context, TesseractOcr(context)) }
+    val storage: com.kharchacheck.app.data.StorageManager by lazy { com.kharchacheck.app.data.StorageManager(context, database, files, wealth) }
 }
 
 class KharchaApp : Application() {
@@ -42,6 +43,7 @@ class KharchaApp : Application() {
         CrashReporter.install(this)
         container = AppContainer(this)
         NavRefreshWorker.schedule(this)
+        com.kharchacheck.app.work.UpkeepWorker.schedule(this)
         Notifier.createChannels(this)
         container.appScope.launch(Dispatchers.IO) {
             container.finance.ensureSeeded()
