@@ -76,6 +76,11 @@ data class AppData(
     val allTxns: List<Txn> = txns,
     val hiddenIds: Set<Long> = emptySet(),
     val revealed: Boolean = false,
+    /** Limits as the user set them ([budgets] adds last month's carry-over where it's switched on). */
+    val baseBudgets: Map<Long, Long> = budgets,
+    /** Category → yyyymm carry-over started; and what carried into this month. */
+    val rollover: Map<Long, Int> = emptyMap(),
+    val carry: Map<Long, Long> = emptyMap(),
 ) {
     fun isHidden(t: Txn) = t.id in hiddenIds
     val activeCategories: List<Category> get() = categories.filter { !it.archived }
@@ -86,7 +91,7 @@ data class UiMessage(val text: String, val actionLabel: String? = null, val acti
 
 data class Win(val emoji: String, val title: String, val body: String)
 
-private data class Raw(val s: Settings, val c: List<Category>, val t: List<Txn>, val b: Map<Long, Long>, val g: List<Goal>)
+private data class Raw(val s: Settings, val c: List<Category>, val t: List<Txn>, val b: Map<Long, Long>, val g: List<Goal>, val ro: Map<Long, Int> = emptyMap())
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val c = app.container
@@ -99,7 +104,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _revealed = MutableStateFlow(false)
     val revealed: StateFlow<Boolean> = _revealed.asStateFlow()
 
-    val data: StateFlow<AppData?> = combine(c.settings.settings, repo.categories, repo.txns, repo.budgets, repo.goals) { s, cats, t, b, g -> Raw(s, cats, t, b, g) }
+    val data: StateFlow<AppData?> = combine(c.settings.settings, repo.categories, repo.txns, repo.budgets.combine(repo.budgetRollover) { b, ro -> b to ro }, repo.goals) { s, cats, t, b, g -> Raw(s, cats, t, b.first, g, b.second) }
         .combine(_revealed) { raw, rev -> derive(raw, rev) }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -124,6 +129,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     val dues: StateFlow<List<Due>> = c.tools.dues.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val bills: StateFlow<List<Bill>> = c.tools.bills.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val accounts: StateFlow<List<com.kharchacheck.app.domain.Account>> = c.tools.accounts.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val trips: StateFlow<List<com.kharchacheck.app.domain.Trip>> = c.tools.trips.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun saveAccount(a: com.kharchacheck.app.domain.Account) = viewModelScope.launch { c.tools.saveAccount(a); say("Saved ✓") }
+    fun deleteAccount(a: com.kharchacheck.app.domain.Account) = viewModelScope.launch { c.tools.deleteAccount(a.id); say("${a.name} removed. Its entries are kept.") }
+    fun makeDefaultAccount(a: com.kharchacheck.app.domain.Account) = viewModelScope.launch { c.tools.makeDefault(a.id); say("${a.name} is now the default ✓") }
+    fun linkUnlinked(a: com.kharchacheck.app.domain.Account) = viewModelScope.launch {
+        val n = c.tools.linkUnlinked(a.id); say(if (n > 0) "Linked $n entries to ${a.name} ✓" else "Nothing to link")
+    }
+    fun saveTrip(t: com.kharchacheck.app.domain.Trip) = viewModelScope.launch { c.tools.saveTrip(t); say("Saved ✓") }
+    fun deleteTrip(t: com.kharchacheck.app.domain.Trip) = viewModelScope.launch { c.tools.deleteTrip(t.id); say("${t.name} removed. Its entries are kept.") }
+    fun setBudgetRollover(categoryId: Long, on: Boolean) = viewModelScope.launch {
+        repo.setBudgetRollover(categoryId, on)
+        say(if (on) "Unspent money will carry into next month ✓" else "Carry-over off")
+    }
 
     val attachments: StateFlow<List<Attachment>> = c.files.all.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -166,7 +187,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val r = if (revealed || hidden.isEmpty()) raw else raw.copy(t = raw.t.filterNot { it.id in hidden })
         val map = r.c.associateBy { it.id }
         val today = LocalDate.now()
-        val report = ReportEngine.build(YearMonth.from(today), r.t, map, reportConfig(r.s, r.b))
+        // Carry-over budgets: last month's unspent money is added to this month's limit, everywhere limits are used.
+        val carry = com.kharchacheck.app.domain.BudgetRollover.carry(r.b, r.ro, r.t, YearMonth.from(today))
+        val limits = if (carry.isEmpty()) r.b else r.b.mapValues { (id, v) -> v + (carry[id] ?: 0L) }
+        val report = ReportEngine.build(YearMonth.from(today), r.t, map, reportConfig(r.s, limits))
         val game = Gamification.build(r.t, map, r.g, r.s.noSpendDays, r.s.challengesWon, r.s.monthlyBudgetPaise, today,
             practicedDays = r.s.practicedTipDays, planStepsDone = r.s.planDone.size,
             wishesSkipped = r.s.wishlist.count { it.decision == com.kharchacheck.app.domain.WishDecision.SKIPPED })
@@ -174,8 +198,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             Gamification.progress(it, LocalDate.ofEpochDay(r.s.challengeStartDay), r.t, map, r.s.noSpendDays, today)
         }
         val todaySpend = r.t.filter { it.date == today && it.type == TxType.EXPENSE && map[it.categoryId]?.bucket?.isSpend != false }.sumOf { it.amountPaise }
-        return AppData(r.s, r.c, map, r.t, r.b, r.g, report, game, ch, r.t.filter { it.review == ReviewState.NEEDS_REVIEW }, todaySpend,
-            allTxns = raw.t, hiddenIds = hidden, revealed = revealed)
+        return AppData(r.s, r.c, map, r.t, limits, r.g, report, game, ch, r.t.filter { it.review == ReviewState.NEEDS_REVIEW }, todaySpend,
+            allTxns = raw.t, hiddenIds = hidden, revealed = revealed, baseBudgets = r.b, rollover = r.ro, carry = carry)
     }
 
     /** New badge or finished challenge → one celebration at a time, never repeated. */

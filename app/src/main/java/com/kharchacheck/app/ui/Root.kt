@@ -86,6 +86,12 @@ import com.kharchacheck.app.ui.nav.HomeRoute
 import com.kharchacheck.app.ui.nav.InboxRoute
 import com.kharchacheck.app.ui.nav.PrivacyRoute
 import com.kharchacheck.app.ui.nav.StorageRoute
+import com.kharchacheck.app.ui.nav.VoiceSetupRoute
+import com.kharchacheck.app.feature.VoiceSetupScreen
+import com.kharchacheck.app.feature.AccountsScreen
+import com.kharchacheck.app.feature.TripsScreen
+import com.kharchacheck.app.ui.nav.AccountsRoute
+import com.kharchacheck.app.ui.nav.TripsRoute
 import com.kharchacheck.app.feature.StorageScreen
 import com.kharchacheck.app.ui.nav.RecurringRoute
 import com.kharchacheck.app.ui.nav.StatementsRoute
@@ -159,6 +165,12 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
         navRequests.collect { target ->
             when (target) {
                 "add" -> nav.navigate(EditRoute())
+                "speak" -> nav.navigate(EditRoute(listen = true))
+                "income" -> nav.navigate(EditRoute(type = "INCOME"))
+                "activity" -> nav.openTab(ActivityRoute)
+                "voice_setup" -> nav.navigate(VoiceSetupRoute)
+                "accounts" -> nav.navigate(AccountsRoute)
+                "trips" -> nav.navigate(TripsRoute)
                 "draft" -> nav.navigate(EditRoute(fromDraft = true))
                 "inbox" -> nav.navigate(InboxRoute)
                 "report" -> nav.openTab(ReportRoute)
@@ -234,6 +246,9 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<InboxRoute> { InboxScreen(vm, nav) }
                 composable<PrivacyRoute> { PrivacyScreen(nav) }
                 composable<StorageRoute> { StorageScreen(vm, nav) }
+                composable<VoiceSetupRoute> { VoiceSetupScreen(vm, nav) }
+                composable<AccountsRoute> { AccountsScreen(vm, nav) }
+                composable<TripsRoute> { TripsScreen(vm, nav) }
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
                 composable<WealthRoute> { WealthScreen(vm, nav) }

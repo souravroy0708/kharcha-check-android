@@ -20,6 +20,7 @@ Settings-style data (hidden entries, practised tips, salary-plan steps) lives in
 | Version | Change | Migration |
 | --- | --- | --- |
 | 1 | First Play Store schema | — |
+| 3 | `accounts` and `trips` tables; `transactions.accountId` / `toAccountId`; `budgets.rolloverFrom` | `MIGRATION_2_3` (additive only) |
 | 2 | Compact `transactions`: `type`, `mode`, `worth`, `source`, `review` stored as 1-byte integer codes; India time zone stored as `""` | `MIGRATION_1_2` in `KharchaDatabase.kt` (copies every row, same fallbacks as before) |
 
 ## Keeping the database small (and offline)

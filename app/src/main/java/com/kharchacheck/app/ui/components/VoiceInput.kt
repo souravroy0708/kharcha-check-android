@@ -3,6 +3,7 @@ package com.kharchacheck.app.ui.components
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.ComponentName
 import android.content.ContextWrapper
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -11,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.RecognitionListener
+import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -94,11 +96,34 @@ object Voice {
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
     }
 
-    fun openAppSettings(context: Context) {
-        val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null))
+    fun openAppSettings(context: Context, packageName: String = context.packageName) {
+        val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         runCatching { context.startActivity(i) }
     }
+
+    /**
+     * The app that actually turns speech into text (usually "Google"). It records the audio itself, so it needs
+     * ITS OWN microphone permission too. When that is off, Android shows "Google voice search isn't available".
+     */
+    data class SpeechService(val packageName: String, val label: String, val enabled: Boolean, val hasMic: Boolean)
+
+    fun speechService(context: Context): SpeechService? = runCatching {
+        val pm = context.packageManager
+        val default = Settings.Secure.getString(context.contentResolver, "voice_recognition_service")
+            ?.let { ComponentName.unflattenFromString(it)?.packageName }
+        val installed = pm.queryIntentServices(Intent(RecognitionService.SERVICE_INTERFACE), 0).map { it.serviceInfo.packageName }
+        val pkg = default?.takeIf { it.isNotBlank() } ?: installed.firstOrNull { it == GOOGLE_APP } ?: installed.firstOrNull() ?: return@runCatching null
+        val info = pm.getApplicationInfo(pkg, 0)
+        SpeechService(
+            packageName = pkg,
+            label = pm.getApplicationLabel(info).toString().ifBlank { "Google" },
+            enabled = info.enabled,
+            hasMic = pm.checkPermission(Manifest.permission.RECORD_AUDIO, pkg) == PackageManager.PERMISSION_GRANTED,
+        )
+    }.getOrNull()
+
+    private const val GOOGLE_APP = "com.google.android.googlequicksearchbox"
 
     /** "Speech Recognition & Synthesis from Google" provides voice typing on most Android phones. */
     fun openSpeechServicesInStore(context: Context) {
@@ -120,7 +145,7 @@ object Voice {
     }
 }
 
-private enum class Phase { EXPLAIN, BLOCKED, NO_SERVICE, LISTENING, ERROR }
+private enum class Phase { EXPLAIN, BLOCKED, NO_SERVICE, SERVICE_MIC, LISTENING, ERROR }
 
 private class VoiceProblem(val title: String, val body: String, val steps: List<String> = emptyList(), val fix: Fix? = null)
 private enum class Fix { VOICE_SETTINGS, STORE }
@@ -139,9 +164,12 @@ fun rememberVoiceInput(prompt: String, onText: (String) -> Unit): (() -> Unit)? 
     var problem by remember { mutableStateOf<VoiceProblem?>(null) }
 
     fun listenOrSetup() {
+        val service = Voice.speechService(context)
         phase = when {
             !Voice.hasMic(context) -> Phase.EXPLAIN
-            !Voice.serviceAvailable(context) -> Phase.NO_SERVICE
+            !Voice.serviceAvailable(context) && !Voice.onDeviceAvailable(context) -> Phase.NO_SERVICE
+            // The speech app is off or has no mic: say exactly which app and which permission (unless on-device recognition can do it).
+            service != null && (!service.enabled || !service.hasMic) && !Voice.onDeviceAvailable(context) -> Phase.SERVICE_MIC
             else -> Phase.LISTENING
         }
     }
@@ -200,12 +228,37 @@ fun rememberVoiceInput(prompt: String, onText: (String) -> Unit): (() -> Unit)? 
             secondary = "Try again", onSecondary = { listenOrSetup() },
             onDismiss = { phase = null },
         )
+        Phase.SERVICE_MIC -> {
+            val service = Voice.speechService(context)
+            val name = service?.label ?: "Google"
+            LifecycleResumeEffect(Unit) {
+                val now = Voice.speechService(context)
+                if (now != null && now.enabled && now.hasMic) listenOrSetup()
+                onPauseOrDispose { }
+            }
+            GuideDialog(
+                icon = "🎙️",
+                title = if (service?.enabled == false) "The “$name” app is turned off" else "Allow the microphone for “$name”",
+                body = "Kharcha Check already has the microphone. Android’s voice typing is done by the “$name” app, and it also needs " +
+                    "the microphone. That’s why Android said voice search isn’t available.",
+                steps = if (service?.enabled == false) listOf("Tap “Open $name settings” below", "Tap Enable (or Turn on)", "Then: Permissions → Microphone → Allow", "Come back and tap 🎤")
+                else listOf("Tap “Open $name settings” below", "Tap Permissions", "Tap Microphone", "Choose “Allow only while using the app”, then come back"),
+                primary = "Open $name settings", onPrimary = { Voice.openAppSettings(context, service?.packageName ?: "com.google.android.googlequicksearchbox") },
+                secondary = "Try anyway", onSecondary = { phase = Phase.LISTENING },
+                onDismiss = { phase = null },
+            )
+        }
         Phase.LISTENING -> ListeningDialog(
             prompt = prompt,
             onText = { phase = null; latest(it) },
             onProblem = { code, onDevice ->
-                if (code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) { phase = Phase.EXPLAIN }
-                else { problem = problemFor(code, onDevice); phase = Phase.ERROR }
+                if (code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                    // If our own mic is allowed, it's the speech app that's missing the permission.
+                    phase = if (Voice.hasMic(context)) Phase.SERVICE_MIC else Phase.EXPLAIN
+                } else if ((code == SpeechRecognizer.ERROR_AUDIO || code == SpeechRecognizer.ERROR_CLIENT) &&
+                    Voice.speechService(context)?.let { !it.hasMic || !it.enabled } == true) {
+                    phase = Phase.SERVICE_MIC
+                } else { problem = problemFor(code, onDevice); phase = Phase.ERROR }
             },
             onDismiss = { phase = null },
         )
@@ -253,7 +306,7 @@ private fun problemFor(code: Int, onDevice: Boolean): VoiceProblem = when (code)
         VoiceProblem("Couldn’t use the microphone", "Another app (a call, a recorder or a voice assistant) may be using it. Close that and tap Try again.")
     else -> VoiceProblem(
         "Voice typing stopped",
-        "Your phone’s speech service didn’t respond (code $code${if (onDevice) ", on-device" else ""}). Try again, or use Google’s voice screen instead. If it keeps failing, update “Speech Recognition & Synthesis from Google” in the Play Store.",
+        "Your phone’s speech service didn’t respond (code $code${if (onDevice) ", on-device" else ""}). Try again, or use Google’s voice screen instead. If it keeps failing, open Settings → Voice entry setup in Kharcha Check: it checks every permission and shows what to fix.",
     )
 }
 

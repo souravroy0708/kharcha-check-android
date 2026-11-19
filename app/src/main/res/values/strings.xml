@@ -5,4 +5,10 @@
     <string name="shortcut_add_long">Add an expense in 5 seconds</string>
     <string name="widget_description">Quick add, your streak and today\'s money thought. Never shows amounts.</string>
     <string name="import_statement_label">Read with Kharcha Check</string>
+    <string name="shortcut_add_short">Add expense</string>
+    <string name="shortcut_add_long">Add an expense</string>
+    <string name="shortcut_speak_short">Speak it</string>
+    <string name="shortcut_speak_long">Speak an expense</string>
+    <string name="shortcut_income_short">Add income</string>
+    <string name="shortcut_income_long">Add income</string>
 </resources>

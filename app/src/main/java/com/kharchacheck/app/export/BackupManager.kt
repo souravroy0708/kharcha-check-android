@@ -16,6 +16,10 @@ import com.kharchacheck.app.data.db.PayeeRuleEntity
 import com.kharchacheck.app.data.db.RecurringEntity
 import com.kharchacheck.app.data.db.TxnEntity
 import com.kharchacheck.app.data.db.Codes
+import com.kharchacheck.app.data.db.ACCOUNT_KINDS
+import com.kharchacheck.app.data.db.AccountEntity
+import com.kharchacheck.app.data.db.TripEntity
+import com.kharchacheck.app.domain.AccountKind
 import com.kharchacheck.app.core.model.PayMode
 import com.kharchacheck.app.core.model.ReviewState
 import com.kharchacheck.app.core.model.Source
@@ -63,9 +67,18 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
                     .put("mode", Codes.of(Codes.MODE, t.mode, PayMode.OTHER).name).put("payee", t.payee).put("note", t.note).put("tags", t.tags)
                     .put("worth", Codes.of(Codes.WORTH, t.worth, Worth.NONE).name).put("source", Codes.of(Codes.SOURCE, t.source, Source.MANUAL).name)
                     .put("review", Codes.of(Codes.REVIEW, t.review, ReviewState.CONFIRMED).name).put("ref", t.refNo)
+                    .put("acc", t.accountId ?: JSONObject.NULL).put("toAcc", t.toAccountId ?: JSONObject.NULL)
                     .put("goal", t.goalId ?: JSONObject.NULL).put("created", t.createdAt).put("updated", t.updatedAt)
             }))
-            .put("budgets", JSONArray(db.budgets().all().map { JSONObject().put("cat", it.categoryId).put("limit", it.limitPaise) }))
+            .put("budgets", JSONArray(db.budgets().all().map { JSONObject().put("cat", it.categoryId).put("limit", it.limitPaise).put("roll", it.rolloverFrom) }))
+            .put("accounts", JSONArray(db.accounts().all().map { a ->
+                JSONObject().put("id", a.id).put("name", a.name).put("emoji", a.emoji).put("kind", Codes.of(ACCOUNT_KINDS, a.kind, AccountKind.BANK).name)
+                    .put("opening", a.openingPaise).put("archived", a.archived).put("order", a.sortOrder)
+            }))
+            .put("trips", JSONArray(db.trips().all().map { t ->
+                JSONObject().put("id", t.id).put("name", t.name).put("emoji", t.emoji).put("tag", t.tag).put("budget", t.budgetPaise)
+                    .put("start", t.startDay).put("end", t.endDay).put("cur", t.currency).put("rate", t.ratePaise)
+            }))
             .put("goals", JSONArray(db.goals().all().map { g ->
                 JSONObject().put("id", g.id).put("name", g.name).put("emoji", g.emoji).put("target", g.targetPaise).put("saved", g.savedPaise)
                     .put("day", g.targetEpochDay ?: JSONObject.NULL).put("archived", g.archived)
@@ -177,8 +190,15 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
             it.optString("payee"), it.optString("note"), it.optString("tags"), Codes.codeOfName(Codes.WORTH, it.optString("worth", "NONE"), Worth.NONE),
             Codes.codeOfName(Codes.SOURCE, it.optString("source", "MANUAL"), Source.MANUAL),
             Codes.codeOfName(Codes.REVIEW, it.optString("review", "CONFIRMED"), ReviewState.CONFIRMED), it.optString("ref"),
-            if (it.isNull("goal")) null else it.getLong("goal"), it.optLong("created"), it.optLong("updated")) }
-        val budgets = arr("budgets").mapObj { BudgetEntity(it.getLong("cat"), it.getLong("limit")) }
+            if (it.isNull("goal")) null else it.getLong("goal"), it.optLong("created"), it.optLong("updated"),
+            if (it.isNull("acc")) null else it.optLong("acc").takeIf { v -> v > 0 },
+            if (it.isNull("toAcc")) null else it.optLong("toAcc").takeIf { v -> v > 0 }) }
+        val budgets = arr("budgets").mapObj { BudgetEntity(it.getLong("cat"), it.getLong("limit"), it.optInt("roll", 0)) }
+        // Older backups have no accounts or trips: these are simply empty.
+        val accounts = arr("accounts").mapObj { AccountEntity(it.getLong("id"), it.getString("name"), it.optString("emoji", "🏦"),
+            Codes.codeOfName(ACCOUNT_KINDS, it.optString("kind", "BANK"), AccountKind.BANK), it.optLong("opening"), it.optBoolean("archived"), it.optInt("order")) }
+        val trips = arr("trips").mapObj { TripEntity(it.getLong("id"), it.getString("name"), it.optString("emoji", "✈️"), it.getString("tag"),
+            it.optLong("budget"), it.getLong("start"), it.getLong("end"), it.optString("cur", "INR"), it.optLong("rate", 100)) }
         val goals = arr("goals").mapObj { GoalEntity(it.getLong("id"), it.getString("name"), it.getString("emoji"), it.getLong("target"),
             it.getLong("saved"), if (it.isNull("day")) null else it.getLong("day"), it.optBoolean("archived")) }
         val recurring = arr("recurring").mapObj { RecurringEntity(it.getLong("id"), it.getLong("amt"), it.getString("type"), it.getLong("cat"),
@@ -204,6 +224,8 @@ class BackupManager(private val context: Context, private val db: KharchaDatabas
             db.goals().insertAll(goals); db.rules().insertAll(rules); db.recurring().insertAll(recurring); db.dues().insertAll(dues); db.bills().insertAll(bills)
             db.wealth().clearHoldings(); db.wealth().clearItems(); db.wealth().clearSnapshots()
             db.wealth().insertHoldings(holdings); db.wealth().insertItems(netItems); db.wealth().insertSnapshots(snaps)
+            db.accounts().clear(); db.accounts().insertAll(accounts)
+            db.trips().clear(); db.trips().insertAll(trips)
         }
         j.optJSONObject("settings")?.let { s ->
             val cur = settings.current()

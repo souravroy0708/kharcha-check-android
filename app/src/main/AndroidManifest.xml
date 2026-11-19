@@ -79,6 +79,8 @@
                 <data android:mimeType="application/vnd.ms-excel" />
                 <data android:mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
             </intent-filter>
+            <!-- Long-press the app icon: Add expense, Speak it, Add income -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- Only for "Open in another app": a temporary decrypted copy in cache/share, wiped on every launch -->

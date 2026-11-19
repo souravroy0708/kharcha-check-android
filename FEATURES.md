@@ -29,6 +29,13 @@
 | Bills & due-date reminders | `domain/MoneyTools.kt` (`Bills`), `feature/ToolsScreens.kt`, `work/DailyWorker.kt` |
 | Kharcha Wrapped (month / year story, personas, image share) | `domain/Wrapped.kt`, `feature/WrappedScreen.kt` |
 | Quick Settings tile | `widget/QuickAddTile.kt` |
+| Launcher shortcuts (long-press icon: Add expense, Speak it, Add income) | `res/xml/shortcuts.xml`, `ui/Root.kt` |
+| Voice entry setup checker (live ✓/✗ for app mic, speech service, speech app's mic, offline) | `feature/VoiceSetupScreen.kt` |
+| Storage & offline screen, compact DB v2, WebP images, gzipped prices, daily offline upkeep | `feature/StorageScreen.kt`, `data/StorageManager.kt` |
+| Free forever card (rate / share) | `feature/SettingsScreens.kt` |
+| Accounts & balances (bank, cash, cards owed, wallets; transfers between them; link old entries in one tap) | `domain/Accounts.kt`, `feature/AccountsTripsScreens.kt` |
+| Trips & events budgets (auto-tag while on, per-day left, foreign currency at your own rate) | `domain/Trips.kt`, `feature/AccountsTripsScreens.kt` |
+| Carry-over budgets and weekly pace per category | `domain/BudgetRollover.kt`, `feature/SettingsScreens.kt` |
 | 🎤 Voice entry and mic on text fields (guided mic permission, in-app listening sheet) | `domain/VoiceEntry.kt`, `ui/components/VoiceInput.kt`, `feature/EditTxnScreen.kt` (`applyVoice`), `feature/HomeScreen.kt` |
 | Logo, themed icon, store graphics | `res/drawable/ic_launcher_*.xml`, `docs/store/` |
 | Wealth & net worth with daily AMFI NAVs | `domain/Wealth.kt`, `data/repo/WealthRepository.kt`, `feature/WealthScreen.kt`, `work/BackgroundWork.kt` (`NavRefreshWorker`) |

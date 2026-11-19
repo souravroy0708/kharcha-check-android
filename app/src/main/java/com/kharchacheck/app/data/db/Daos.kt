@@ -43,6 +43,7 @@ interface BudgetDao {
     @Query("SELECT * FROM budgets") suspend fun all(): List<BudgetEntity>
     @Upsert suspend fun upsert(b: BudgetEntity)
     @Query("DELETE FROM budgets WHERE categoryId = :id") suspend fun delete(id: Long)
+    @Query("UPDATE budgets SET rolloverFrom = :from WHERE categoryId = :id") suspend fun setRollover(id: Long, from: Int)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(list: List<BudgetEntity>)
     @Query("DELETE FROM budgets") suspend fun clear()
 }
@@ -137,4 +138,29 @@ interface WealthDao {
     @Query("DELETE FROM holdings") suspend fun clearHoldings()
     @Query("DELETE FROM net_items") suspend fun clearItems()
     @Query("DELETE FROM net_snapshots") suspend fun clearSnapshots()
+}
+
+@Dao
+interface AccountDao {
+    @Query("SELECT * FROM accounts ORDER BY archived, sortOrder, id") fun observe(): Flow<List<AccountEntity>>
+    @Query("SELECT * FROM accounts") suspend fun all(): List<AccountEntity>
+    @Upsert suspend fun upsert(a: AccountEntity): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(list: List<AccountEntity>)
+    @Query("DELETE FROM accounts WHERE id = :id") suspend fun delete(id: Long)
+    @Query("UPDATE accounts SET sortOrder = CASE WHEN id = :id THEN 0 ELSE sortOrder + 1 END") suspend fun makeFirst(id: Long)
+    /** Entries stay when an account is deleted; they just aren't linked any more. */
+    @Query("UPDATE transactions SET accountId = NULL WHERE accountId = :id") suspend fun unlinkFrom(id: Long)
+    @Query("UPDATE transactions SET toAccountId = NULL WHERE toAccountId = :id") suspend fun unlinkTo(id: Long)
+    @Query("UPDATE transactions SET accountId = :id WHERE accountId IS NULL") suspend fun linkUnlinked(id: Long): Int
+    @Query("DELETE FROM accounts") suspend fun clear()
+}
+
+@Dao
+interface TripDao {
+    @Query("SELECT * FROM trips ORDER BY startDay DESC") fun observe(): Flow<List<TripEntity>>
+    @Query("SELECT * FROM trips") suspend fun all(): List<TripEntity>
+    @Upsert suspend fun upsert(t: TripEntity): Long
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(list: List<TripEntity>)
+    @Query("DELETE FROM trips WHERE id = :id") suspend fun delete(id: Long)
+    @Query("DELETE FROM trips") suspend fun clear()
 }

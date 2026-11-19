@@ -94,6 +94,7 @@ import com.kharchacheck.app.domain.AmountExpression
 import com.kharchacheck.app.domain.Dues
 import com.kharchacheck.app.domain.InvestMath
 import com.kharchacheck.app.domain.VoiceEntry
+import com.kharchacheck.app.domain.Trips
 import com.kharchacheck.app.domain.read.ReceiptParser
 import com.kharchacheck.app.ui.AppData
 import com.kharchacheck.app.ui.AppViewModel
@@ -155,6 +156,16 @@ class EditTxnState : ViewModel() {
     var reading by mutableStateOf(false)
     var keypad by mutableStateOf(true)
     var startedAt = System.currentTimeMillis()
+    /** Account paid from / received into, and (transfers) the account it went to. */
+    var accountId by mutableStateOf<Long?>(null)
+    var toAccountId by mutableStateOf<Long?>(null)
+    /** Trip currency the amount was typed in (e.g. "USD") and ₹ paise per unit; null = rupees. */
+    var foreignCode by mutableStateOf<String?>(null)
+    var foreignRate by mutableLongStateOf(100L)
+    var tripAutoTagged = false
+
+    /** What will actually be saved, in rupees (converted when typed in a trip's currency). */
+    val rupeePaise: Long? get() = amountPaise?.let { a -> foreignCode?.let { Trips.toRupees(a, foreignRate) } ?: a }
 
     val amountPaise: Long? get() = AmountExpression.evaluate(expr)
 
@@ -162,23 +173,30 @@ class EditTxnState : ViewModel() {
         original = if (editing) t else null
         type = t.type; expr = plain(t.amountPaise); categoryId = t.categoryId; epochMillis = t.epochMillis; mode = t.mode
         payee = t.payee; note = t.note; tags = t.tags; worth = t.worth; goalId = t.goalId; source = t.source; refNo = t.refNo
+        accountId = t.accountId ?: accountId; toAccountId = t.toAccountId; foreignCode = null
         keypad = !editing && t.amountPaise == 0L
     }
 
     fun resetForAnother() {
         original = null; expr = ""; categoryId = 0; payee = ""; note = ""; tags = ""; worth = Worth.NONE; goalId = null
         source = Source.MANUAL; refNo = ""; rememberRule = false; repeat = false; splitOn = false; hidden = false; splitNames = ""; attachmentIds = emptyList(); pendingRead = null; readNote = null; keypad = true; startedAt = System.currentTimeMillis()
+        toAccountId = null; tripAutoTagged = false
     }
 
     fun build(): Txn? {
-        val amt = amountPaise ?: return null
+        val typed = amountPaise ?: return null
+        val amt = rupeePaise ?: return null
         if (categoryId == 0L) return null
         val o = original
+        // Typed in a trip currency: keep the original amount and rate in the note, so the conversion is never a mystery.
+        val fx = foreignCode?.let { "$it ${plain(typed)} at ₹${plain(foreignRate)}" }
+        val finalNote = listOf(note.trim(), fx.orEmpty()).filter { it.isNotBlank() }.joinToString(" · ").take(200)
         return Txn(
             id = o?.id ?: 0, amountPaise = amt, type = type, categoryId = categoryId, epochMillis = epochMillis,
-            zoneId = o?.zoneId ?: ZoneId.systemDefault().id, mode = mode, payee = payee.trim(), note = note.trim(), tags = tags.trim(),
+            zoneId = o?.zoneId ?: ZoneId.systemDefault().id, mode = mode, payee = payee.trim(), note = finalNote, tags = tags.trim(),
             worth = if (type == TxType.EXPENSE) worth else Worth.NONE, source = source, review = ReviewState.CONFIRMED, refNo = refNo,
             goalId = if (type == TxType.INVEST) goalId else null, createdAt = o?.createdAt ?: System.currentTimeMillis(),
+            accountId = accountId, toAccountId = if (type == TxType.TRANSFER) toAccountId?.takeIf { it != accountId } else null,
         )
     }
 
@@ -199,6 +217,8 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
     var newCategory by rememberSaveable { mutableStateOf(false) }
     var viewing by remember { mutableStateOf<Attachment?>(null) }
     val allAttachments by vm.attachments.collectAsStateWithLifecycle()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val trips by vm.trips.collectAsStateWithLifecycle()
     val platform = LocalPlatform.current
 
     // Auto-read a newly attached screenshot (offline OCR). Only empty fields are filled.
@@ -238,7 +258,19 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 if (route.spoken.isNotBlank()) st.readNote = applyVoice(st, route.spoken, data)
             }
         }
+        if (st.original == null && st.accountId == null) st.accountId = vm.accounts.value.firstOrNull { !it.archived }?.id
         st.loaded = true
+    }
+
+    // While a trip or event is on, a new expense is tagged to it once (the chip below can untick it).
+    LaunchedEffect(st.loaded, trips, st.startedAt) {
+        if (!st.loaded || st.original != null || st.tripAutoTagged || st.type != TxType.EXPENSE) return@LaunchedEffect
+        val day = Instant.ofEpochMilli(st.epochMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+        trips.filter { it.isOn(day) }.singleOrNull()?.let { t ->
+            st.tags = Trips.addTag(st.tags, t.tag)
+            if (t.foreign) { st.foreignCode = t.currency; st.foreignRate = t.ratePaise }
+        }
+        st.tripAutoTagged = true
     }
 
     val editing = st.original != null
@@ -296,14 +328,21 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                     .semantics { contentDescription = "Amount ${st.amountPaise?.let { Money.format(it, true) } ?: "empty"}. Tap to edit." },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(st.amountPaise?.let { Money.format(it, withPaise = true) } ?: "₹0", style = MaterialTheme.typography.displayMedium,
-                    color = if (st.amountPaise != null) Color.White else MutedOnInk, maxLines = 1)
+                val fx = st.foreignCode
+                Text(st.amountPaise?.let { if (fx != null) "$fx ${st.plain(it)}" else Money.format(it, withPaise = true) } ?: (if (fx != null) "$fx 0" else "₹0"),
+                    style = MaterialTheme.typography.displayMedium, color = if (st.amountPaise != null) Color.White else MutedOnInk, maxLines = 1)
+                if (fx != null) st.rupeePaise?.let { Text("= ${Money.format(it, withPaise = true)} at ₹${st.plain(st.foreignRate)} per $fx", style = MaterialTheme.typography.bodyMedium, color = Haldi) }
                 Text(if (AmountExpression.hasOperator(st.expr)) st.expr else if (st.keypad) "Tip: type 120+45 to add items" else "Tap to change amount",
                     style = MaterialTheme.typography.bodySmall, color = MutedOnInk, maxLines = 1)
             }
             // Speak the whole entry: "250 for chai at Ramesh, by cash" fills amount, category, payee, note and mode.
             if (!editing) {
                 val speakEntry = rememberVoiceInput("Say the amount and what it was for") { heard -> st.readNote = applyVoice(st, heard, data) }
+                // Launcher shortcut "Speak an expense": open straight into listening, once.
+                var autoListened by rememberSaveable { mutableStateOf(false) }
+                LaunchedEffect(route.listen) {
+                    if (route.listen && !autoListened && st.original == null && st.amountPaise == null) { autoListened = true; speakEntry?.invoke() }
+                }
                 if (speakEntry != null) {
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).border(1.dp, InkLine, RoundedCornerShape(50))
@@ -385,10 +424,58 @@ fun EditTxnScreen(vm: AppViewModel, nav: NavHostController, route: EditRoute) {
                 item { Choice("🕘 " + zdt.toLocalTime().format(DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)), false) { showTime = true } }
             }
 
+            // Accounts: which balance this changes. Picking a card / cash / wallet also sets "Paid with".
+            val shown = accounts.filter { !it.archived || it.id == st.accountId || it.id == st.toAccountId }
+            if (shown.isNotEmpty()) {
+                Text(when (st.type) { TxType.INCOME -> "Received in"; TxType.TRANSFER -> "From account"; else -> "Paid from" },
+                    style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(shown, key = { it.id }) { a ->
+                        Choice("${a.emoji} ${a.name}", st.accountId == a.id) {
+                            st.accountId = if (st.accountId == a.id) null else a.id
+                            if (st.accountId != null && st.type != TxType.INCOME) a.kind.payMode?.let { st.mode = it }
+                        }
+                    }
+                }
+                if (st.type == TxType.TRANSFER) {
+                    Text("To account", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(shown.filter { it.id != st.accountId }, key = { it.id }) { a ->
+                            Choice("${a.emoji} ${a.name}", st.toAccountId == a.id) { st.toAccountId = if (st.toAccountId == a.id) null else a.id }
+                        }
+                    }
+                }
+            }
+
             if (st.type != TxType.INCOME) {
                 Text("Paid with", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(PayMode.entries) { m -> Choice(m.label, st.mode == m) { st.mode = m } }
+                }
+            }
+
+            // Trips & events: tag the entry to a trip that covers its date (or one it's already tagged with).
+            val entryDay = date
+            val tagged = Trips.tagsOf(st.tags)
+            val tripsHere = trips.filter { it.isOn(entryDay) || it.tag in tagged }
+            if (st.type == TxType.EXPENSE && tripsHere.isNotEmpty()) {
+                Text("Trip or event", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(tripsHere, key = { it.id }) { t ->
+                        val on = t.tag in tagged
+                        Choice("${t.emoji} ${t.name}", on) {
+                            st.tags = if (on) Trips.removeTag(st.tags, t.tag) else Trips.addTag(st.tags, t.tag)
+                            if (on && st.foreignCode == t.currency) st.foreignCode = null
+                        }
+                    }
+                }
+                val ft = tripsHere.firstOrNull { it.foreign && it.tag in tagged }
+                if (ft != null && !editing) {
+                    Text("Amount typed in", style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Choice("₹ Rupees", st.foreignCode == null) { st.foreignCode = null }
+                        Choice(ft.currency, st.foreignCode == ft.currency) { st.foreignCode = ft.currency; st.foreignRate = ft.ratePaise }
+                    }
                 }
             }
 
@@ -557,7 +644,7 @@ private fun applyVoice(st: EditTxnState, heard: String, d: AppData): String {
     val r = VoiceEntry.parse(heard)
     val fresh = st.original == null
     val filled = mutableListOf<String>()
-    if (r.amountPaise != null && (fresh || st.amountPaise == null)) { st.expr = st.plain(r.amountPaise); filled += "amount" }
+    if (r.amountPaise != null && (fresh || st.amountPaise == null)) { st.expr = st.plain(r.amountPaise); st.foreignCode = null; filled += "amount" }
     // The category decides the type ("SIP" → Invest), unless the words said it outright ("received", "lent").
     if (fresh || st.categoryId == 0L) {
         val cat = r.categoryKey?.let { k -> d.activeCategories.firstOrNull { it.key == k && (r.type == null || it.bucket.type == r.type) } }
@@ -600,7 +687,7 @@ private fun applyReceipt(st: EditTxnState, r: ReceiptParser.Result?, d: AppData)
         if (cat != null) { st.type = r.type; st.categoryId = cat.id; filled += "category" }
         else if (st.original == null) st.type = r.type
     }
-    if (st.amountPaise == null && r.amountPaise != null) { st.expr = st.plain(r.amountPaise); filled += "amount" }
+    if (st.amountPaise == null && r.amountPaise != null) { st.expr = st.plain(r.amountPaise); st.foreignCode = null; filled += "amount" }
     if (st.payee.isBlank() && r.payee.isNotBlank()) { st.payee = r.payee; filled += if (r.type == TxType.INCOME) "sender" else "payee" }
     if (st.original == null && r.dateTime != null) {
         st.epochMillis = minOf(r.dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(), System.currentTimeMillis()); filled += "date"

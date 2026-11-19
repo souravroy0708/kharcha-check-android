@@ -95,8 +95,17 @@ class FinanceRepository(private val db: KharchaDatabase) {
     }
 
     // ---- Budgets & goals ----
-    suspend fun setCategoryBudget(categoryId: Long, paise: Long) =
-        if (paise <= 0) db.budgets().delete(categoryId) else db.budgets().upsert(BudgetEntity(categoryId, paise))
+    /** Category → yyyymm from which unspent money carries over (only categories with carry-over on). */
+    val budgetRollover: Flow<Map<Long, Int>> = db.budgets().observe().map { l -> l.filter { it.rolloverFrom > 0 }.associate { it.categoryId to it.rolloverFrom } }
+
+    suspend fun setCategoryBudget(categoryId: Long, paise: Long) {
+        if (paise <= 0) { db.budgets().delete(categoryId); return }
+        val keep = db.budgets().all().firstOrNull { it.categoryId == categoryId }?.rolloverFrom ?: 0
+        db.budgets().upsert(BudgetEntity(categoryId, paise, keep))
+    }
+
+    suspend fun setBudgetRollover(categoryId: Long, on: Boolean) =
+        db.budgets().setRollover(categoryId, if (on) com.kharchacheck.app.domain.BudgetRollover.key(java.time.YearMonth.now()) else 0)
 
     suspend fun saveGoal(g: Goal): Long { val e = g.toEntity(); return db.goals().upsert(e).let { if (e.id != 0L) e.id else it } }
     suspend fun deleteGoal(id: Long) = db.goals().delete(id)
@@ -183,6 +192,7 @@ class FinanceRepository(private val db: KharchaDatabase) {
     suspend fun wipeEverything() = db.withTransaction {
         db.txns().clear(); db.budgets().clear(); db.goals().clear(); db.rules().clear(); db.recurring().clear(); db.dues().clear(); db.bills().clear()
         db.wealth().clearHoldings(); db.wealth().clearItems(); db.wealth().clearSnapshots(); db.categories().clear()
+        db.accounts().clear(); db.trips().clear()
     }
 
     internal val database: KharchaDatabase get() = db

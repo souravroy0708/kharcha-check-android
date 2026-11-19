@@ -73,6 +73,10 @@ data class Txn(
     val goalId: Long? = null,
     val createdAt: Long = epochMillis,
     val updatedAt: Long = epochMillis,
+    /** Which account it was paid from / received into (null = not linked). */
+    val accountId: Long? = null,
+    /** For transfers: the account the money went to. */
+    val toAccountId: Long? = null,
 ) {
     // Computed once per entry, not on every read: reports and analytics read these millions of times.
     val zone: ZoneId by lazy(LazyThreadSafetyMode.PUBLICATION) { runCatching { ZoneId.of(zoneId) }.getOrDefault(ZoneId.systemDefault()) }

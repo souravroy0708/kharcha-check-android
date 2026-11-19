@@ -51,15 +51,21 @@ fun ToolsScreen(vm: AppViewModel, nav: NavHostController) {
     val data = d ?: return
     val bills by vm.bills.collectAsStateWithLifecycle()
     val dues by vm.dues.collectAsStateWithLifecycle()
+    val accounts by vm.accounts.collectAsStateWithLifecycle()
+    val trips by vm.trips.collectAsStateWithLifecycle()
     val today = LocalDate.now()
     val s = data.settings
-    val tools = remember(data, bills, dues) {
+    val tools = remember(data, bills, dues, accounts, trips) {
+        val net = com.kharchacheck.app.domain.Balances.let { b -> b.net(accounts, b.of(accounts, data.allTxns)) }
+        val liveTrip = trips.firstOrNull { it.isOn(today) } ?: trips.filter { it.start.isAfter(today) }.minByOrNull { it.start }
         val score = HealthScorer.score(healthInputsFor(data)).score
         val subs = Subscriptions.detect(data.txns, data.catMap, today).filter { it.key !in s.subsCancelled }
         val goalSip = data.goals.filter { !it.archived && !it.done }.sumOf { g -> s.goalPlans[g.id]?.let { p -> GoalPlanner.plan(p, g.savedPaise).let { if (p.stepUp) it.sipStepUpStartPaise else it.sipFlatPaise } } ?: 0L }
         val ready = s.wishlist.count { Wishlist.ready(it, today) }
         val dueSoon = Bills.upcoming(bills, today, 7).size
         listOf(
+            Tool("🏦", "Accounts & balances", if (accounts.isEmpty()) "Bank, cash, cards, wallets" else "${Money.compact(net)} across ${accounts.count { !it.archived }}") { nav.navigate(com.kharchacheck.app.ui.nav.AccountsRoute) },
+            Tool("✈️", "Trips & events", liveTrip?.let { t -> if (t.isOn(today)) "${t.emoji} ${t.name} on now" else "${t.emoji} ${t.name} coming up" } ?: "Budget a trip, wedding, festival") { nav.navigate(com.kharchacheck.app.ui.nav.TripsRoute) },
             Tool("💯", "Money health", score?.let { "Score $it / 100" } ?: "See your score") { nav.navigate(HealthRoute) },
             Tool("📘", "Smart Money Guide", "Salary plan · research · tips") { nav.navigate(GuideRoute()) },
             Tool("🎯", "Goals & plans", if (goalSip > 0) "${Money.compact(goalSip)}/month planned" else "Home, education, retirement") { nav.navigate(GoalsRoute) },

@@ -10,8 +10,8 @@ import com.kharchacheck.app.data.security.DbKeyStore
 import net.zetetic.database.sqlcipher.SupportOpenHelperFactory
 
 @Database(
-    entities = [CategoryEntity::class, TxnEntity::class, BudgetEntity::class, GoalEntity::class, PayeeRuleEntity::class, RecurringEntity::class, AttachmentEntity::class, DueEntity::class, BillEntity::class, HoldingEntity::class, NetItemEntity::class, NetSnapshotEntity::class],
-    version = 2,
+    entities = [CategoryEntity::class, TxnEntity::class, BudgetEntity::class, GoalEntity::class, PayeeRuleEntity::class, RecurringEntity::class, AttachmentEntity::class, DueEntity::class, BillEntity::class, HoldingEntity::class, NetItemEntity::class, NetSnapshotEntity::class, AccountEntity::class, TripEntity::class],
+    version = 3,
     exportSchema = true,
 )
 abstract class KharchaDatabase : RoomDatabase() {
@@ -25,6 +25,8 @@ abstract class KharchaDatabase : RoomDatabase() {
     abstract fun dues(): DueDao
     abstract fun bills(): BillDao
     abstract fun wealth(): WealthDao
+    abstract fun accounts(): AccountDao
+    abstract fun trips(): TripDao
 
     companion object {
         const val NAME = "kharcha_v2.db"
@@ -36,7 +38,7 @@ abstract class KharchaDatabase : RoomDatabase() {
          *       db.execSQL("ALTER TABLE transactions ADD COLUMN foo INTEGER NOT NULL DEFAULT 0") } }
          * and commit the new app/schemas/…/2.json produced by the build. CI blocks schema changes without this.
          */
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         /** Size of the WAL file Android may keep after a checkpoint (it can never stay bigger than this). */
         private const val WAL_LIMIT_BYTES = 512 * 1024
@@ -104,5 +106,23 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_categoryId` ON `transactions` (`categoryId`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_review` ON `transactions` (`review`)")
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_transactions_refNo` ON `transactions` (`refNo`)")
+    }
+}
+
+/** v2 → v3: accounts with balances, trips & events, carry-over budgets. Purely additive: no existing data changes. */
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `accountId` INTEGER")
+        db.execSQL("ALTER TABLE `transactions` ADD COLUMN `toAccountId` INTEGER")
+        db.execSQL("ALTER TABLE `budgets` ADD COLUMN `rolloverFrom` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `accounts` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, " +
+                "`emoji` TEXT NOT NULL, `kind` INTEGER NOT NULL, `openingPaise` INTEGER NOT NULL, `archived` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL)"
+        )
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `trips` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `emoji` TEXT NOT NULL, " +
+                "`tag` TEXT NOT NULL, `budgetPaise` INTEGER NOT NULL, `startDay` INTEGER NOT NULL, `endDay` INTEGER NOT NULL, " +
+                "`currency` TEXT NOT NULL, `ratePaise` INTEGER NOT NULL)"
+        )
     }
 }

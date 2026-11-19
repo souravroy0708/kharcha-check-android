@@ -95,6 +95,8 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     val files by vm.attachments.collectAsStateWithLifecycle()
     val billsList by vm.bills.collectAsStateWithLifecycle()
     val duesList by vm.dues.collectAsStateWithLifecycle()
+    val accountsList by vm.accounts.collectAsStateWithLifecycle()
+    val tripsList by vm.trips.collectAsStateWithLifecycle()
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -181,6 +183,29 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                     item { QuickChip("📄", "Statement") { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) } }
                     items(quick, key = { it.id }) { c -> QuickChip(c.emoji, c.name.substringBefore(" (").substringBefore(" &")) { nav.navigate(EditRoute(type = c.bucket.type.name, categoryId = c.id)) } }
+                }
+            }
+        }
+
+        // Balances and the trip that's on now: only shown once the user has set them up.
+        val liveTrip = tripsList.firstOrNull { it.isOn(java.time.LocalDate.now()) }
+        if (accountsList.any { !it.archived } || liveTrip != null) item {
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (accountsList.any { !it.archived }) {
+                    val bal = remember(accountsList, data.allTxns) { com.kharchacheck.app.domain.Balances.of(accountsList, data.allTxns) }
+                    KcCard(Modifier.weight(1f), onClick = { nav.navigate(com.kharchacheck.app.ui.nav.AccountsRoute) }, padding = 14.dp) {
+                        Text("🏦 Balances", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                        Text(if (data.settings.maskAmounts) "₹ ••••" else Money.compact(com.kharchacheck.app.domain.Balances.net(accountsList, bal)),
+                            style = MaterialTheme.typography.titleLarge, color = Kc.colors.text)
+                    }
+                }
+                if (liveTrip != null) {
+                    val spent = remember(liveTrip, data.allTxns) { com.kharchacheck.app.domain.Trips.spent(liveTrip, data.allTxns) }
+                    KcCard(Modifier.weight(1f), onClick = { nav.navigate(com.kharchacheck.app.ui.nav.TripsRoute) }, padding = 14.dp) {
+                        Text("${liveTrip.emoji} ${liveTrip.name}", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 1)
+                        Text(if (liveTrip.budgetPaise > 0) "${Money.compact((liveTrip.budgetPaise - spent).coerceAtLeast(0))} left" else "${Money.compact(spent)} spent",
+                            style = MaterialTheme.typography.titleLarge, color = if (liveTrip.budgetPaise in 1 until spent) Coral else Kc.colors.text)
+                    }
                 }
             }
         }

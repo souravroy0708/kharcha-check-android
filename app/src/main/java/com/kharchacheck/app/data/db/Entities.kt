@@ -57,10 +57,45 @@ data class TxnEntity(
     val goalId: Long?,
     val createdAt: Long,
     val updatedAt: Long,
+    /** v3: account paid from / received into; null = not linked. */
+    val accountId: Long? = null,
+    /** v3: for transfers, the account the money went to. */
+    val toAccountId: Long? = null,
 )
 
+/** rolloverFrom: yyyymm when "carry over unspent" was switched on; 0 = off (v3). */
 @Entity(tableName = "budgets")
-data class BudgetEntity(@PrimaryKey val categoryId: Long, val limitPaise: Long)
+data class BudgetEntity(
+    @PrimaryKey val categoryId: Long,
+    val limitPaise: Long,
+    @ColumnInfo(defaultValue = "0") val rolloverFrom: Int = 0,
+)
+
+/** v3: bank accounts, cash, credit cards and wallets. kind = AccountKind ordinal code (append-only). */
+@Entity(tableName = "accounts")
+data class AccountEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val emoji: String,
+    val kind: Int,
+    val openingPaise: Long,
+    val archived: Boolean,
+    val sortOrder: Int,
+)
+
+/** v3: trips and events with their own budget; entries belong through [tag]. Dates are epoch days. */
+@Entity(tableName = "trips")
+data class TripEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val emoji: String,
+    val tag: String,
+    val budgetPaise: Long,
+    val startDay: Long,
+    val endDay: Long,
+    val currency: String,
+    val ratePaise: Long,
+)
 
 @Entity(tableName = "goals")
 data class GoalEntity(
@@ -187,14 +222,26 @@ fun TxnEntity.toModel() = Txn(
     zoneId = Codes.unpackZone(zoneId), mode = Codes.of(Codes.MODE, mode, PayMode.OTHER), payee = payee, note = note, tags = tags,
     worth = Codes.of(Codes.WORTH, worth, Worth.NONE), source = Codes.of(Codes.SOURCE, source, Source.MANUAL),
     review = Codes.of(Codes.REVIEW, review, ReviewState.CONFIRMED), refNo = refNo, goalId = goalId,
-    createdAt = createdAt, updatedAt = updatedAt,
+    createdAt = createdAt, updatedAt = updatedAt, accountId = accountId, toAccountId = toAccountId,
 )
 
 fun Txn.toEntity() = TxnEntity(
     id, amountPaise, Codes.code(Codes.TYPE, type), categoryId, epochMillis, Codes.packZone(zoneId), Codes.code(Codes.MODE, mode),
     payee.trim(), note.trim(), tags.trim(), Codes.code(Codes.WORTH, worth), Codes.code(Codes.SOURCE, source),
-    Codes.code(Codes.REVIEW, review), refNo.trim(), goalId, createdAt, updatedAt,
+    Codes.code(Codes.REVIEW, review), refNo.trim(), goalId, createdAt, updatedAt, accountId,
+    toAccountId.takeIf { type == TxType.TRANSFER },
 )
+
+/** Account kinds as codes. Append only. */
+val ACCOUNT_KINDS = listOf(com.kharchacheck.app.domain.AccountKind.BANK, com.kharchacheck.app.domain.AccountKind.CASH,
+    com.kharchacheck.app.domain.AccountKind.CARD, com.kharchacheck.app.domain.AccountKind.WALLET)
+
+fun AccountEntity.toModel() = com.kharchacheck.app.domain.Account(id, name, emoji,
+    Codes.of(ACCOUNT_KINDS, kind, com.kharchacheck.app.domain.AccountKind.BANK), openingPaise, archived, sortOrder)
+fun com.kharchacheck.app.domain.Account.toEntity() = AccountEntity(id, name.trim(), emoji, Codes.code(ACCOUNT_KINDS, kind), openingPaise, archived, sortOrder)
+
+fun TripEntity.toModel() = com.kharchacheck.app.domain.Trip(id, name, emoji, tag, budgetPaise, LocalDate.ofEpochDay(startDay), LocalDate.ofEpochDay(endDay), currency, ratePaise)
+fun com.kharchacheck.app.domain.Trip.toEntity() = TripEntity(id, name.trim(), emoji, tag, budgetPaise, start.toEpochDay(), end.toEpochDay(), currency, ratePaise)
 
 fun GoalEntity.toModel() = Goal(id, name, emoji, targetPaise, savedPaise, targetEpochDay?.let(LocalDate::ofEpochDay), archived)
 fun Goal.toEntity() = GoalEntity(id, name, emoji, targetPaise, savedPaise, targetDate?.toEpochDay(), archived)

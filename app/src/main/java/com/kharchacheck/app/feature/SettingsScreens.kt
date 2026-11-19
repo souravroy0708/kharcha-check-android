@@ -69,6 +69,7 @@ import com.kharchacheck.app.ui.nav.CategoriesRoute
 import com.kharchacheck.app.ui.nav.InboxRoute
 import com.kharchacheck.app.ui.nav.PrivacyRoute
 import com.kharchacheck.app.ui.nav.StorageRoute
+import com.kharchacheck.app.ui.nav.VoiceSetupRoute
 import com.kharchacheck.app.ui.nav.RecurringRoute
 import com.kharchacheck.app.ui.nav.StatementsRoute
 import com.kharchacheck.app.ui.theme.Coral
@@ -135,6 +136,19 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                 }
             }
         }
+        item {
+            KcCard(onClick = { nav.navigate(VoiceSetupRoute) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🎤", fontSize = 30.sp); Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Voice entry setup", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("Mic not working? Checks every permission and shows the fix", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                }
+            }
+        }
+        item { FreeForeverCard() }
         item {
             KcCard(title = "You & your money") {
                 SettingRow("Name", "Used only for greetings", s.name.ifBlank { "Not set" }) { dlg = Dlg.NAME }
@@ -434,26 +448,40 @@ fun BudgetsScreen(vm: AppViewModel, nav: NavHostController) {
     var editing by remember { mutableStateOf<Category?>(null) }
     val spentNow = data.report.categories.associate { it.category.id to it.paise }
     SubScreen("Category budgets", onBack = { nav.popBackStack() }) {
-        item { Text("Set limits only for categories you want to watch. Leaks are a great place to start.", style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted) }
+        item { Text("Set limits only for categories you want to watch. Leaks are a great place to start. Turn on “Carry over” and what you don't spend this month is added to next month's limit.", style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted) }
         listOf(Bucket.LEAK, Bucket.WANT, Bucket.NEED).forEach { b ->
             item(key = "h-$b") { Text(b.label, style = MaterialTheme.typography.titleLarge, color = Kc.colors.text, modifier = Modifier.padding(top = 8.dp)) }
             items(data.activeCategories.filter { it.bucket == b }, key = { it.id }) { c ->
                 val limit = data.budgets[c.id]
+                val base = data.baseBudgets[c.id]
+                val carried = data.carry[c.id] ?: 0L
+                val rollOn = (data.rollover[c.id] ?: 0) > 0
                 val spent = spentNow[c.id] ?: 0L
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Kc.colors.card).clickable { editing = c }.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    CategoryIcon(c, 34.dp); Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(c.name, style = MaterialTheme.typography.bodyLarge, color = Kc.colors.text)
-                        if (limit != null) Text("${Money.format(spent)} of ${Money.format(limit)} this month", style = MaterialTheme.typography.bodySmall,
-                            color = if (spent > limit) Coral else Kc.colors.muted)
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Kc.colors.card).clickable { editing = c }.padding(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CategoryIcon(c, 34.dp); Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(c.name, style = MaterialTheme.typography.bodyLarge, color = Kc.colors.text)
+                            if (limit != null) Text("${Money.format(spent)} of ${Money.format(limit)} this month" + if (carried > 0) " (incl. ${Money.compact(carried)} carried)" else "",
+                                style = MaterialTheme.typography.bodySmall, color = if (spent > limit) Coral else Kc.colors.muted)
+                            if (limit != null) {
+                                val (share, week) = com.kharchacheck.app.domain.BudgetRollover.weekly(limit, c.id, data.txns, java.time.LocalDate.now())
+                                Text("This week ${Money.compact(week)} of about ${Money.compact(share)}", style = MaterialTheme.typography.bodySmall,
+                                    color = if (week > share) Coral else Kc.colors.muted)
+                            }
+                        }
+                        Pill(base?.let { Money.compact(it) } ?: "Set", if (base != null) Haldi else Kc.colors.chip, if (base != null) Ink else Kc.colors.muted)
                     }
-                    Pill(limit?.let { Money.compact(it) } ?: "Set", if (limit != null) Haldi else Kc.colors.chip, if (limit != null) Ink else Kc.colors.muted)
+                    if (base != null) Row(Modifier.padding(start = 46.dp, top = 6.dp)) {
+                        Pill(if (rollOn) "↻ Carry over: on" else "↻ Carry over: off", if (rollOn) Ink else Kc.colors.chip, if (rollOn) Haldi else Kc.colors.muted) {
+                            vm.setBudgetRollover(c.id, !rollOn)
+                        }
+                    }
                 }
             }
         }
     }
-    editing?.let { c -> MoneyDialog("${c.emoji} ${c.name} budget", data.budgets[c.id] ?: 0, "Leave empty to remove the limit.", { editing = null }) { vm.setCategoryBudget(c.id, it); editing = null } }
+    editing?.let { c -> MoneyDialog("${c.emoji} ${c.name} budget", data.baseBudgets[c.id] ?: 0, "Leave empty to remove the limit.", { editing = null }) { vm.setCategoryBudget(c.id, it); editing = null } }
 }
 
 @Composable
@@ -527,4 +555,41 @@ private fun ordinal(n: Int): String = n.toString() + when {
     n % 10 == 2 -> "nd"
     n % 10 == 3 -> "rd"
     else -> "th"
+}
+
+/** Kharcha Check is free with no ads: the only "payment" asked for is a rating or a share. */
+@Composable
+private fun FreeForeverCard() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val pkg = context.packageName
+    KcCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("❤️", fontSize = 30.sp); Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Free. No ads. No premium plan.", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                Text("Every feature is free for everyone. If it helps you, a rating or a share helps others find it.",
+                    style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            androidx.compose.material3.Button(
+                onClick = {
+                    val market = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("market://details?id=$pkg"))
+                    val web = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://play.google.com/store/apps/details?id=$pkg"))
+                    runCatching { context.startActivity(market) }.onFailure { runCatching { context.startActivity(web) } }
+                },
+                modifier = Modifier.weight(1f),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Haldi, contentColor = Ink),
+            ) { Text("⭐ Rate it") }
+            androidx.compose.material3.OutlinedButton(
+                onClick = {
+                    val text = "I track my spending with Kharcha Check: free, no ads, no SMS reading, and everything stays encrypted on the phone. " +
+                        "https://play.google.com/store/apps/details?id=$pkg"
+                    val send = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain").putExtra(android.content.Intent.EXTRA_TEXT, text)
+                    runCatching { context.startActivity(android.content.Intent.createChooser(send, "Share Kharcha Check")) }
+                },
+                modifier = Modifier.weight(1f),
+            ) { Text("Share with friends") }
+        }
+    }
 }
