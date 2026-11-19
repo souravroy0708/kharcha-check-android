@@ -288,13 +288,11 @@ fun TripEntity.toModel() = com.kharchacheck.app.domain.Trip(id, name, emoji, tag
 fun com.kharchacheck.app.domain.Trip.toEntity() = TripEntity(id, name.trim(), emoji, tag, budgetPaise, start.toEpochDay(), end.toEpochDay(), currency, ratePaise, destination.trim(), notes.trim())
 
 /** Trip item kinds as codes. Append only. */
-val TRIP_ITEM_KINDS = com.kharchacheck.app.domain.TripItemKind.let { _ ->
-    listOf(
-        com.kharchacheck.app.domain.TripItemKind.TRAIN, com.kharchacheck.app.domain.TripItemKind.FLIGHT, com.kharchacheck.app.domain.TripItemKind.BUS,
-        com.kharchacheck.app.domain.TripItemKind.CAB, com.kharchacheck.app.domain.TripItemKind.STAY, com.kharchacheck.app.domain.TripItemKind.FOOD,
-        com.kharchacheck.app.domain.TripItemKind.ACTIVITY, com.kharchacheck.app.domain.TripItemKind.SHOPPING, com.kharchacheck.app.domain.TripItemKind.OTHER,
-    )
-}
+val TRIP_ITEM_KINDS: List<com.kharchacheck.app.domain.TripItemKind> = listOf(
+    com.kharchacheck.app.domain.TripItemKind.TRAIN, com.kharchacheck.app.domain.TripItemKind.FLIGHT, com.kharchacheck.app.domain.TripItemKind.BUS,
+    com.kharchacheck.app.domain.TripItemKind.CAB, com.kharchacheck.app.domain.TripItemKind.STAY, com.kharchacheck.app.domain.TripItemKind.FOOD,
+    com.kharchacheck.app.domain.TripItemKind.ACTIVITY, com.kharchacheck.app.domain.TripItemKind.SHOPPING, com.kharchacheck.app.domain.TripItemKind.OTHER,
+)
 
 fun TripItemEntity.toModel() = com.kharchacheck.app.domain.TripItem(id, tripId, Codes.of(TRIP_ITEM_KINDS, kind, com.kharchacheck.app.domain.TripItemKind.OTHER),
     title, fromPlace, toPlace, startAt.takeIf { it > 0 }, endAt.takeIf { it > 0 }, refNo, details, travellers, costPaise, paid, txnId, note, paidBy)
