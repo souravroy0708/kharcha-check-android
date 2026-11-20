@@ -96,7 +96,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     val fmt = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH)
 
     var photoMenu by rememberSaveable { mutableStateOf(false) }
-    SubScreen("Settings", onBack = { nav.popBackStack() }) {
+    SubScreen("Settings", onBack = null) {
         item {
             KcCard {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -146,6 +146,26 @@ fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                     Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
                 }
+            }
+        }
+        item {
+            KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.HelpRoute) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("❓", fontSize = 30.sp); Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Help & how-to", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("Simple steps: add, voice, statements, backup, new phone", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                }
+            }
+        }
+        item {
+            KcCard(title = "Text size") {
+                Text("Bigger text across the whole app. Easier to read, especially for parents.", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                val sizes = listOf(100, 115, 130)
+                Segmented(listOf("Normal", "Large", "Extra large"), sizes.indexOf(s.textScale).coerceAtLeast(0)) { vm.setTextScale(sizes[it]) }
+                Text("₹1,250 · Sample text", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
             }
         }
         item { FreeForeverCard() }

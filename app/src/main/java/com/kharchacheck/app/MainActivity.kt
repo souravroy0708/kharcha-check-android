@@ -179,8 +179,14 @@ class MainActivity : FragmentActivity() {
                 if (settings?.secureScreen == false) window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                 else window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
             }
+            // Text size from Settings (Normal / Large / Extra large), on top of the phone's own font size.
+            val base = androidx.compose.ui.platform.LocalDensity.current
+            val scale = (settings?.textScale ?: 100) / 100f
             KharchaTheme(dark = dark) {
-                CompositionLocalProvider(LocalPlatform provides actions) {
+                CompositionLocalProvider(
+                    LocalPlatform provides actions,
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(base.density, base.fontScale * scale),
+                ) {
                     KharchaRoot(vm, navRequests.receiveAsFlow())
                 }
             }

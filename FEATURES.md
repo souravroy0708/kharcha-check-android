@@ -32,6 +32,8 @@
 | Launcher shortcuts (long-press icon: Add expense, Speak it, Add income) | `res/xml/shortcuts.xml`, `ui/Root.kt` |
 | Voice entry setup checker (live ✓/✗ for app mic, speech service, speech app's mic, offline) | `feature/VoiceSetupScreen.kt` |
 | Storage & offline screen, compact DB v2, WebP images, gzipped prices, daily offline upkeep | `feature/StorageScreen.kt`, `data/StorageManager.kt` |
+| Bottom tabs: Home · Activity · ＋ · Tools · Settings. Home shows 8 highlight tiles by importance (Report, Budgets, Accounts, Import, Trips, Bills, Money health, Grow) with live status, then "All tools" | `ui/Root.kt`, `feature/HomeScreen.kt`, `feature/ToolsScreen.kt` (`rememberMoneyTools`) |
+| Made for everyone: "Getting started" checklist on Home (auto-ticks), backup safety card, Text size (Normal / Large / Extra large, whole app), Help & how-to with "show me" buttons, 📅 calendar view in Activity (tap a day) | `feature/HomeScreen.kt`, `feature/HelpScreen.kt`, `feature/ActivityScreen.kt`, `MainActivity.kt` |
 | Free forever card (rate / share) | `feature/SettingsScreens.kt` |
 | Accounts & balances (bank, cash, cards owed, wallets; transfers between them; link old entries in one tap) | `domain/Accounts.kt`, `feature/AccountsTripsScreens.kt` |
 | Trips & events budgets (auto-tag while on, per-day left, foreign currency at your own rate) | `domain/Trips.kt`, `feature/AccountsTripsScreens.kt` |

@@ -1,5 +1,6 @@
 package com.kharchacheck.app.feature
 
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,6 +96,11 @@ private fun MonthReportView(vm: AppViewModel, nav: NavHostController, switcher: 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Hero {
+                // Report now opens from Home / Tools, so it gets a way back.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
+                    Text("Report", style = MaterialTheme.typography.titleLarge, color = Color.White)
+                }
                 switcher()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { vm.setReportMonth(month.minusMonths(1)) }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Previous month", tint = Color.White) }
@@ -197,7 +203,7 @@ private fun MonthReportView(vm: AppViewModel, nav: NavHostController, switcher: 
                     if (r.regretPaise > 0) Text("😬 Marked as regret: ${Money.format(r.regretPaise)}", style = MaterialTheme.typography.bodyMedium, color = Coral)
                     if (r.smallTicketCount > 0) Text("☕ ${r.smallTicketCount} small payments under ₹${d?.settings?.smallTicketRupees ?: 200}: ${Money.format(r.smallTicketPaise)}",
                         style = MaterialTheme.typography.bodyMedium, color = Kc.colors.muted)
-                    OutlinedButton(onClick = { nav.openTab(GrowRoute) }) { Text("Pick a challenge to cut one") }
+                    OutlinedButton(onClick = { nav.navigate(GrowRoute) }) { Text("Pick a challenge to cut one") }
                 }
             }
         }

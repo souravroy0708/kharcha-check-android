@@ -361,6 +361,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun reveal() { _revealed.value = true }
     fun hideAgain() { _revealed.value = false }
     fun setMaskAmounts(v: Boolean) = viewModelScope.launch { c.settings.setMaskAmounts(v) }
+    fun setTextScale(v: Int) = viewModelScope.launch { c.settings.setTextScale(v) }
+    fun dismissGettingStarted() = viewModelScope.launch { c.settings.setStartDismissed(true); say("Hidden. You'll find help any time in Settings → Help & how-to.") }
 
     fun confirmAll(ids: List<Long>) = viewModelScope.launch { repo.confirm(ids); say("Confirmed ${ids.size} entries ✓") }
 

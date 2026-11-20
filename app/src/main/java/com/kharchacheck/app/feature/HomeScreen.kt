@@ -1,5 +1,6 @@
 package com.kharchacheck.app.feature
 
+import androidx.compose.material3.TextButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -97,42 +98,79 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     val duesList by vm.dues.collectAsStateWithLifecycle()
     val accountsList by vm.accounts.collectAsStateWithLifecycle()
     val tripsList by vm.trips.collectAsStateWithLifecycle()
+    val tools = com.kharchacheck.app.feature.rememberMoneyTools(vm, nav)
     val diaryList by vm.tripDiary.collectAsStateWithLifecycle()
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { HomeHero(vm, data, onSettings = { nav.navigate(SettingsRoute) }, onTools = { nav.navigate(com.kharchacheck.app.ui.nav.ToolsRoute) }) }
-        // Money health score: one number, one next step.
-        item {
-            val hs = remember(data) { com.kharchacheck.app.domain.HealthScorer.score(com.kharchacheck.app.feature.healthInputsFor(data)) }
-            Box(Modifier.padding(horizontal = 16.dp)) {
-                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.HealthRoute) }) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(hs.score?.toString() ?: "💯", fontSize = 32.sp, color = com.kharchacheck.app.feature.scoreColor(hs.score) ?: Kc.colors.text,
-                            style = MaterialTheme.typography.headlineMedium)
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Money health: ${hs.grade}", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
-                            Text(hs.nextStep?.let { "Next: ${it.pillar.emoji} ${it.action}" } ?: if (hs.score == null) "Log a few weeks and add your salary to see your score." else "All six pillars look strong 🎉",
-                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted, maxLines = 2)
-                        }
-                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+        item { HomeHero(vm, data, onSettings = { nav.openTab(SettingsRoute) }, onTools = { nav.openTab(com.kharchacheck.app.ui.nav.ToolsRoute) }) }
+        // Getting started: five things that make the app useful and safe, ticked off automatically. Hidden once done or dismissed.
+        val s0 = data.settings
+        val starts = listOf(
+            Triple("Add your first expense", data.allTxns.isNotEmpty()) { nav.navigate(EditRoute()) },
+            Triple("Set a monthly budget", s0.monthlyBudgetPaise > 0) { nav.openTab(SettingsRoute) },
+            Triple("Add your bank, cash or card", accountsList.isNotEmpty()) { nav.navigate(com.kharchacheck.app.ui.nav.AccountsRoute) },
+            Triple("Turn on automatic backup", s0.autoBackup && s0.backupFolder.isNotBlank()) { nav.openTab(SettingsRoute) },
+            Triple("Lock the app with your fingerprint", s0.appLock) { nav.openTab(SettingsRoute) },
+        )
+        val doneCount = starts.count { it.second }
+        if (!s0.startDismissed && doneCount < starts.size) item {
+            KcCard(Modifier.padding(horizontal = 16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Getting started", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text("$doneCount of ${starts.size} done", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
                     }
+                    TextButton(onClick = { vm.dismissGettingStarted() }) { Text("Hide") }
+                }
+                ProgressBar(doneCount.toFloat() / starts.size, Mint)
+                starts.forEach { (label, done, go) ->
+                    Row(Modifier.fillMaxWidth().clickable(enabled = !done) { go() }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (done) "✅" else "⬜", fontSize = 18.sp); Spacer(Modifier.width(10.dp))
+                        Text(label, style = MaterialTheme.typography.bodyLarge, color = if (done) Kc.colors.muted else Kc.colors.text, modifier = Modifier.weight(1f))
+                        if (!done) Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
+                    }
+                }
+                Text("Need help? Tools → ❓ Help & how-to", style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted,
+                    modifier = Modifier.clickable { nav.navigate(com.kharchacheck.app.ui.nav.HelpRoute) })
+            }
+        }
+
+        // Safety net: everything lives only on this phone, so nudge (once there's something to lose) until backup is on and recent.
+        val backupStale = !s0.autoBackup || s0.backupFolder.isBlank() || System.currentTimeMillis() - s0.lastBackupAt > 14L * 86_400_000L
+        if ((s0.startDismissed || doneCount == starts.size) && data.allTxns.size >= 20 && backupStale) item {
+            KcCard(Modifier.padding(horizontal = 16.dp), onClick = { nav.openTab(SettingsRoute) }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("🛟", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Your ${data.allTxns.size} entries are only on this phone", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                        Text(if (s0.lastBackupAt > 0) "Last backup was a while ago. Turn on automatic backup so a lost phone doesn't lose them."
+                            else "Turn on automatic backup (Google Drive works) so a lost phone doesn't lose them.",
+                            style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                    }
+                    Pill("Set up", Haldi, Ink) { nav.openTab(SettingsRoute) }
                 }
             }
         }
 
+        // Highlights: the most useful features, most important first, each with a live status. The rest live in the Tools tab.
         item {
-            Box(Modifier.padding(horizontal = 16.dp)) {
-                KcCard(onClick = { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }) {
+            val order = listOf("report", "budgets", "accounts", "import", "trips", "bills", "health", "grow")
+            val picks = order.mapNotNull { id -> tools.firstOrNull { it.id == id } }
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Your money tools", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
+                picks.chunked(2).forEachIndexed { row, pair ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        pair.forEachIndexed { i, t -> com.kharchacheck.app.feature.ToolTile(t, Modifier.weight(1f), highlight = row == 0 && i == 0) }
+                        if (pair.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
+                KcCard(onClick = { nav.openTab(com.kharchacheck.app.ui.nav.ToolsRoute) }, padding = 14.dp) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("📄", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Import bank or card statement", style = MaterialTheme.typography.titleMedium, color = Kc.colors.text)
-                            Text("PDF, Excel or CSV, up to a full year. Amounts checked against your balance; nothing is added twice.",
-                                style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
-                        }
-                        Pill("Import", Haldi, Ink) { nav.navigate(StatementsRoute(java.time.YearMonth.now().toString())) }
+                        Text("🧰", fontSize = 22.sp); Spacer(Modifier.width(12.dp))
+                        Text("All ${tools.size} tools: goals, split, subscriptions, wealth, tax, memories…", style = MaterialTheme.typography.bodyMedium,
+                            color = Kc.colors.text, modifier = Modifier.weight(1f), maxLines = 2)
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = Kc.colors.muted)
                     }
                 }
             }
@@ -332,7 +370,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
 
-        item { Box(Modifier.padding(horizontal = 16.dp)) { StreakCard(data, vm, onGrow = { nav.openTab(GrowRoute) }) } }
+        item { Box(Modifier.padding(horizontal = 16.dp)) { StreakCard(data, vm, onGrow = { nav.navigate(GrowRoute) }) } }
 
         if (!data.report.isEmpty) item {
             Box(Modifier.padding(horizontal = 16.dp)) {
@@ -343,7 +381,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
 
-        if (data.report.leaksPaise > 0) item { Box(Modifier.padding(horizontal = 16.dp)) { LeakCard(data, onGrow = { nav.openTab(GrowRoute) }) } }
+        if (data.report.leaksPaise > 0) item { Box(Modifier.padding(horizontal = 16.dp)) { LeakCard(data, onGrow = { nav.navigate(GrowRoute) }) } }
 
         item { Box(Modifier.padding(horizontal = 12.dp)) { SectionHeader("Recent", "See all") { nav.openTab(ActivityRoute) } } }
         val recent = data.txns.take(6)
@@ -405,12 +443,10 @@ private fun HomeHero(vm: AppViewModel, d: AppData, onSettings: () -> Unit, onToo
                 Text(today.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)) + " · private to this phone 🔒",
                     style = MaterialTheme.typography.bodySmall, color = MutedOnInk)
             }
-            IconButton(onClick = onTools) { Icon(Icons.Rounded.Apps, contentDescription = "All tools", tint = Color.White) }
             IconButton(onClick = { vm.setMaskAmounts(!s.maskAmounts) }) {
                 Icon(if (s.maskAmounts) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
                     contentDescription = if (s.maskAmounts) "Show amounts" else "Hide amounts", tint = Color.White)
             }
-            IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, contentDescription = "Settings", tint = Color.White) }
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
             SpendRing(

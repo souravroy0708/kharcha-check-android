@@ -1,5 +1,9 @@
 package com.kharchacheck.app.feature
 
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,6 +63,7 @@ import com.kharchacheck.app.domain.InvestMath
 import com.kharchacheck.app.domain.TipTopic
 import com.kharchacheck.app.ui.AppData
 import com.kharchacheck.app.ui.AppViewModel
+import com.kharchacheck.app.ui.openTab
 import com.kharchacheck.app.ui.components.HabitGrid
 import com.kharchacheck.app.ui.components.Hero
 import com.kharchacheck.app.ui.components.HeroTile
@@ -89,7 +94,10 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Hero {
-                Text("Grow", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", tint = Color.White) }
+                    Text("Grow", style = MaterialTheme.typography.headlineMedium, color = Color.White)
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.width(64.dp).aspectRatio(1f).clip(CircleShape).background(Haldi), contentAlignment = Alignment.Center) {
                         Text("${g.level.number}", style = MaterialTheme.typography.headlineLarge, color = Ink)
@@ -111,7 +119,7 @@ fun GrowScreen(vm: AppViewModel, nav: NavHostController) {
 
         item {
             Pad {
-                KcCard(onClick = { nav.navigate(com.kharchacheck.app.ui.nav.ToolsRoute) }) {
+                KcCard(onClick = { nav.openTab(com.kharchacheck.app.ui.nav.ToolsRoute) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("🧰", fontSize = 28.sp); Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {

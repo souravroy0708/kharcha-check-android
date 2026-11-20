@@ -1,5 +1,6 @@
 package com.kharchacheck.app.feature
 
+import com.kharchacheck.app.ui.components.CalendarHeat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,6 +102,9 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
     val files by vm.attachments.collectAsStateWithLifecycle()
     val attached = remember(files) { files.mapNotNull { it.txnId }.toSet() }
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
+    // 📅 Calendar view: the month at a glance, shaded by spend; tap a day to see just that day.
+    var calendar by rememberSaveable { mutableStateOf(false) }
+    var pickedDay by rememberSaveable(month) { mutableStateOf<Int?>(null) }
     var moving by rememberSaveable { mutableStateOf(false) }
     var confirmDelete by rememberSaveable { mutableStateOf(false) }
     val selecting = selectedIds.isNotEmpty()
@@ -126,6 +130,9 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
                 Text("Activity", style = MaterialTheme.typography.headlineMedium, color = Color.White, modifier = Modifier.weight(1f))
                 Pill("📄 Import", Haldi, Ink, Modifier.padding(end = 4.dp)) { nav.navigate(StatementsRoute(ym.toString())) }
                 Pill("⬇ Export", Ink2, Color.White, Modifier.padding(end = 4.dp)) { nav.navigate(ExportRoute) }
+                if (query.isBlank()) Pill("📅", if (calendar) Haldi else Ink2, if (calendar) Ink else Color.White, Modifier.padding(end = 4.dp)) {
+                    calendar = !calendar; if (!calendar) pickedDay = null
+                }
                 if (query.isBlank()) {
                     IconButton(onClick = { month = ym.minusMonths(1).toString() }) { Icon(Icons.AutoMirrored.Rounded.KeyboardArrowLeft, "Previous month", tint = Color.White) }
                     Text(ym.format(DateTimeFormatter.ofPattern("MMM yyyy", Locale.ENGLISH)), style = MaterialTheme.typography.titleMedium, color = Color.White)
@@ -160,11 +167,23 @@ fun ActivityScreen(vm: AppViewModel, nav: NavHostController) {
         }
 
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 110.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (calendar && query.isBlank()) item(key = "calendar") {
+                val daily = remember(list, month) {
+                    MutableList(ym.lengthOfMonth()) { 0L }.also { d -> list.filter { it.type == TxType.EXPENSE && YearMonth.from(it.date) == ym }.forEach { d[it.date.dayOfMonth - 1] += it.amountPaise } }
+                }
+                KcCard(padding = 12.dp) {
+                    CalendarHeat(ym, daily, pickedDay) { i -> pickedDay = if (pickedDay == i) null else i }
+                    Text(pickedDay?.let { "${ym.atDay(it + 1).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH))}: ${Money.format(daily[it])} spent · tap again to see all" }
+                        ?: "Darker days = more spent. Tap a day to see only that day.",
+                        style = MaterialTheme.typography.bodySmall, color = Kc.colors.muted)
+                }
+            }
+            val shown = if (calendar && pickedDay != null && query.isBlank()) list.filter { it.date.dayOfMonth == pickedDay!! + 1 && YearMonth.from(it.date) == ym } else list
             item {
-                Text("${list.size} entries" + (if (total > 0) " · ${Money.format(total)} spent" else "") + if (!selecting) " · long-press to select" else "",
+                Text("${shown.size} entries" + (if (total > 0 && shown === list) " · ${Money.format(total)} spent" else "") + if (!selecting) " · long-press to select" else "",
                     style = MaterialTheme.typography.labelLarge, color = Kc.colors.muted, modifier = Modifier.padding(start = 4.dp))
             }
-            list.groupBy { it.date }.forEach { (date, dayList) ->
+            shown.groupBy { it.date }.forEach { (date, dayList) ->
                 item(key = "d-$date") {
                     DayGroup(date, dayList, data.catMap, attached, selectedIds, data.hiddenIds, onLong = { toggle(it.id) }) { t ->
                         if (selecting) toggle(t.id) else nav.navigate(EditRoute(id = t.id))

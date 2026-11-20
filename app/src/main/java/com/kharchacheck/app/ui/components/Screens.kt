@@ -47,13 +47,15 @@ import com.kharchacheck.app.ui.theme.MutedOnInk
 
 /** Standard secondary screen: ink top bar with back, scrolling content. */
 @Composable
-fun SubScreen(title: String, onBack: () -> Unit, actions: @Composable () -> Unit = {}, content: LazyListScope.() -> Unit) {
+fun SubScreen(title: String, onBack: (() -> Unit)?, actions: @Composable () -> Unit = {}, content: LazyListScope.() -> Unit) {
     Column(Modifier.fillMaxSize().background(Kc.colors.paper)) {
         Row(
             Modifier.fillMaxWidth().background(Ink).statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White) }
+            // Tab screens (Tools, Settings) have no back arrow; everything opened from them does.
+            if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = Color.White) }
+            else Spacer(Modifier.width(12.dp))
             Text(title, style = MaterialTheme.typography.titleLarge, color = Color.White, modifier = Modifier.weight(1f))
             actions()
         }

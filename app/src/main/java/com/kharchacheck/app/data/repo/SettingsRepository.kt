@@ -58,6 +58,10 @@ data class Settings(
     val hiddenIds: Set<Long> = emptySet(),
     /** Mask the big amounts on Home (for showing the app to someone). */
     val maskAmounts: Boolean = false,
+    /** App-wide text size in percent: 100 normal, 115 large, 130 extra large (for parents, or anyone who prefers it). */
+    val textScale: Int = 100,
+    /** The user hid the "Getting started" checklist on Home. */
+    val startDismissed: Boolean = false,
     /** "yyyy-MM|categoryId|level" budget warnings already sent, so each one is sent once a month. */
     val budgetAlertsSent: Set<String> = emptySet(),
     /** Put statements, receipts and the profile photo inside backups (bigger files, nothing lost on a new phone). */
@@ -136,6 +140,8 @@ class SettingsRepository(private val context: Context) {
         val importedFiles = stringSetPreferencesKey("imported_files")
         val hidden = stringSetPreferencesKey("hidden_ids")
         val mask = booleanPreferencesKey("mask_amounts")
+        val textScale = intPreferencesKey("text_scale")
+        val startDismissed = booleanPreferencesKey("start_dismissed")
         val budgetAlerts = stringSetPreferencesKey("budget_alerts")
         val backupFiles = booleanPreferencesKey("backup_files")
         val goalPlans = stringPreferencesKey("goal_plans")
@@ -206,6 +212,8 @@ class SettingsRepository(private val context: Context) {
                 val i = e.lastIndexOf('|'); if (i < 0) null else e.substring(0, i) to java.time.LocalDate.ofEpochDay(e.substring(i + 1).toLongOrNull() ?: return@mapNotNull null)
             }.toMap(),
             subsKept = p[K.subsKept].orEmpty(),
+            textScale = (p[K.textScale] ?: 100).coerceIn(85, 150),
+            startDismissed = p[K.startDismissed] ?: false,
             wishlist = WishJson.decode(p[K.wishlist]),
             workHoursPerMonth = p[K.workHours] ?: 176,
             noonHour = p[K.noonH] ?: 13, noonMinute = p[K.noonM] ?: 0, eveHour = p[K.eveH] ?: 19, eveMinute = p[K.eveM] ?: 30,
@@ -297,6 +305,8 @@ class SettingsRepository(private val context: Context) {
     suspend fun setWorkHours(h: Int) = context.store.edit { it[K.workHours] = h }
     suspend fun setBackupIncludeFiles(v: Boolean) = context.store.edit { it[K.backupFiles] = v }
     suspend fun setMaskAmounts(v: Boolean) = context.store.edit { it[K.mask] = v }
+    suspend fun setTextScale(v: Int) = context.store.edit { it[K.textScale] = v.coerceIn(85, 150) }
+    suspend fun setStartDismissed(v: Boolean) = context.store.edit { it[K.startDismissed] = v }
     suspend fun setReminder(on: Boolean, hour: Int, minute: Int) = context.store.edit { it[K.reminder] = on; it[K.rh] = hour; it[K.rm] = minute }
 
     suspend fun toggleNoSpend(epochDay: Long) = context.store.edit {

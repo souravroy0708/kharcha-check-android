@@ -38,6 +38,7 @@ import com.kharchacheck.app.ui.components.StatBlock
 import com.kharchacheck.app.ui.components.SubScreen
 import com.kharchacheck.app.ui.components.SwitchRow
 import com.kharchacheck.app.ui.nav.SettingsRoute
+import com.kharchacheck.app.ui.openTab
 import com.kharchacheck.app.ui.theme.Haldi
 import com.kharchacheck.app.ui.theme.Ink
 import com.kharchacheck.app.ui.theme.Kc
@@ -152,7 +153,7 @@ fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
                 Text("An export is great for reading and sharing, but it can't restore goals, budgets, bills or settings. " +
                     "To move everything to a new phone, make a password backup (.kcbak) too, and restore it after installing.",
                     style = MaterialTheme.typography.bodyMedium, color = Kc.colors.text)
-                OutlinedButton(onClick = { nav.navigate(SettingsRoute) }, modifier = Modifier.fillMaxWidth()) { Text("Go to backup in Settings") }
+                OutlinedButton(onClick = { nav.openTab(SettingsRoute) }, modifier = Modifier.fillMaxWidth()) { Text("Go to backup in Settings") }
             }
         }
     }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Apps
+import androidx.compose.material.icons.rounded.Settings as SettingsIcon
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.PieChart
@@ -135,8 +137,8 @@ private data class Tab(val route: Any, val isAt: (NavDestination) -> Boolean, va
 private val TABS = listOf(
     Tab(HomeRoute, { it.hasRoute<HomeRoute>() }, "Home", Icons.Rounded.Home),
     Tab(ActivityRoute, { it.hasRoute<ActivityRoute>() }, "Activity", Icons.Rounded.Receipt),
-    Tab(ReportRoute, { it.hasRoute<ReportRoute>() }, "Report", Icons.Rounded.PieChart),
-    Tab(GrowRoute, { it.hasRoute<GrowRoute>() }, "Grow", Icons.Rounded.EmojiEvents),
+    Tab(ToolsRoute, { it.hasRoute<ToolsRoute>() }, "Tools", Icons.Rounded.Apps),
+    Tab(SettingsRoute, { it.hasRoute<SettingsRoute>() }, "Settings", Icons.Rounded.SettingsIcon),
 )
 
 fun NavHostController.openTab(route: Any) = navigate(route) {
@@ -172,11 +174,12 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 "accounts" -> nav.navigate(AccountsRoute)
                 "trips" -> nav.navigate(TripsRoute)
                 "memories" -> nav.navigate(com.kharchacheck.app.ui.nav.MemoriesRoute)
+                "help" -> nav.navigate(com.kharchacheck.app.ui.nav.HelpRoute)
                 "draft" -> nav.navigate(EditRoute(fromDraft = true))
                 "inbox" -> nav.navigate(InboxRoute)
-                "report" -> nav.openTab(ReportRoute)
+                "report" -> nav.navigate(ReportRoute)
                 "bills" -> nav.navigate(BillsRoute)
-                "settings" -> nav.navigate(SettingsRoute)
+                "settings" -> nav.openTab(SettingsRoute)
                 "dues" -> nav.navigate(DuesRoute)
                 "goals" -> nav.navigate(GoalsRoute)
                 "tax" -> nav.navigate(TaxRoute)
@@ -251,6 +254,7 @@ private fun MainShell(vm: AppViewModel, navRequests: Flow<String>) {
                 composable<AccountsRoute> { AccountsScreen(vm, nav) }
                 composable<TripsRoute> { TripsScreen(vm, nav) }
                 composable<com.kharchacheck.app.ui.nav.MemoriesRoute> { com.kharchacheck.app.feature.MemoriesScreen(vm, nav) }
+                composable<com.kharchacheck.app.ui.nav.HelpRoute> { com.kharchacheck.app.feature.HelpScreen(nav) }
                 composable<com.kharchacheck.app.ui.nav.TripRoute> { e -> com.kharchacheck.app.feature.TripDetailScreen(vm, nav, e.toRoute<com.kharchacheck.app.ui.nav.TripRoute>().id) }
                 composable<RecurringRoute> { RecurringScreen(vm, nav) }
                 composable<DuesRoute> { DuesScreen(vm, nav) }
